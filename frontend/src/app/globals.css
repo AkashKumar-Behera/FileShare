@@ -39,25 +39,48 @@
   --box-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
-/* Dark mode basic structure - since toggle is visible we can support class-based dark mode */
+/* Dark mode structure - High precision pure black & layered contrast palette */
 .dark {
-  --bg-app: #0B0C10;
-  --bg-sidebar: #111217;
-  --bg-card: #181920;
-  --border-color: #242631;
+  --bg-app: #000000;
+  --bg-sidebar: #060608;
+  --bg-navbar: rgba(12, 12, 15, 0.75);
+  --bg-card: #121318;
+  --bg-card-hover: #1A1B22;
+  --bg-input: #0A0B0E;
+  --bg-modal: #181920;
+  --bg-secondary-btn: #1E202A;
+  --border-color: #1F212A;
   
-  --primary: #7A79F5;
-  --primary-hover: #6362D9;
-  --primary-light: #1D1E2C;
-  --primary-muted: #A1A0F8;
+  --primary: #6C63FF;
+  --primary-hover: #7E76FF;
+  --primary-light: rgba(108, 99, 255, 0.16);
+  --primary-muted: #8E8DF1;
 
-  --text-primary: #ECEFF4;
+  --text-primary: #FFFFFF;
   --text-secondary: #A0A5B5;
-  --text-muted: #727786;
+  --text-muted: #6C7282;
+  --text-disabled: #444854;
   
-  --success-light: #122F26;
-  --danger-light: #3A1B1B;
+  --success: #10B981;
+  --success-light: rgba(16, 185, 129, 0.15);
+  --danger: #EF4444;
+  --danger-light: rgba(239, 68, 68, 0.15);
+  --warning: #F59E0B;
+  --warning-light: rgba(245, 158, 11, 0.15);
+  --info: #3B82F6;
+  --info-light: rgba(59, 130, 246, 0.15);
+
+  /* File Type Badges */
+  --badge-pdf: #EF4444;
+  --badge-pdf-bg: rgba(239, 68, 68, 0.15);
+  --badge-zip: #F97316;
+  --badge-zip-bg: rgba(249, 115, 22, 0.15);
+  --badge-img: #06B6D4;
+  --badge-img-bg: rgba(6, 182, 212, 0.15);
+  --badge-media: #A855F7;
+  --badge-media-bg: rgba(168, 85, 247, 0.15);
 }
+
 
 * {
   box-sizing: border-box;
