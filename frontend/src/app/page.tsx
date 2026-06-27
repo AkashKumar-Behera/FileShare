@@ -48,8 +48,13 @@ import {
   Star,
   ArrowLeft,
   Paperclip,
-  Music
+  Music,
+  RotateCw,
+  Edit3,
+  Share2,
+  Sparkles
 } from "lucide-react";
+
 
 // Interfaces for UI Data
 interface ActivityItem {
@@ -117,7 +122,92 @@ interface ChatMessage {
   file_type?: string;
 }
 
+function StarParticlesCanvas({ enabled, intensity, speed, isDark }: { enabled: boolean; intensity: string; speed: string; isDark: boolean }) {
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+
+  React.useEffect(() => {
+    if (!enabled || !isDark) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    let width = (canvas.width = canvas.parentElement?.clientWidth || 300);
+    let height = (canvas.height = canvas.parentElement?.clientHeight || 400);
+
+    const handleResize = () => {
+      if (canvas && canvas.parentElement) {
+        width = canvas.width = canvas.parentElement.clientWidth;
+        height = canvas.height = canvas.parentElement.clientHeight;
+      }
+    };
+    window.addEventListener("resize", handleResize);
+
+    const count = intensity === "Low" ? 30 : intensity === "High" ? 120 : 65;
+    const speedMult = speed === "Slow" ? 0.4 : speed === "Fast" ? 2.0 : 1.0;
+
+    const stars = Array.from({ length: count }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      radius: Math.random() * 1.6 + 0.4,
+      alpha: Math.random(),
+      vx: (Math.random() - 0.5) * 0.3 * speedMult,
+      vy: (Math.random() - 0.5) * 0.3 * speedMult,
+      alphaSpeed: (Math.random() * 0.018 + 0.005) * speedMult
+    }));
+
+    const render = () => {
+      ctx.clearRect(0, 0, width, height);
+      stars.forEach((star) => {
+        star.x += star.vx;
+        star.y += star.vy;
+        star.alpha += star.alphaSpeed;
+
+        if (star.alpha <= 0.1 || star.alpha >= 1) star.alphaSpeed = -star.alphaSpeed;
+        if (star.x < 0) star.x = width;
+        if (star.x > width) star.x = 0;
+        if (star.y < 0) star.y = height;
+        if (star.y > height) star.y = 0;
+
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, Math.min(1, star.alpha))})`;
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = "rgba(108, 99, 255, 0.8)";
+        ctx.fill();
+      });
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [enabled, intensity, speed, isDark]);
+
+  if (!enabled || !isDark) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+        zIndex: 0
+      }}
+    />
+  );
+}
+
 export default function Home() {
+
   const [activePage, setActivePage] = useState<string>("Dashboard");
   const [showTip, setShowTip] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -182,6 +272,18 @@ export default function Home() {
   const [settingsDownloadPath, setSettingsDownloadPath] = useState("C:\\Downloads\\FileShare");
   const [settingsClearLogs, setSettingsClearLogs] = useState(false);
   const [settingsSubCategory, setSettingsSubCategory] = useState("General");
+
+  // Star Particles Settings
+  const [settingsStarEnabled, setSettingsStarEnabled] = useState(true);
+  const [settingsStarIntensity, setSettingsStarIntensity] = useState("Medium");
+  const [settingsStarSpeed, setSettingsStarSpeed] = useState("Normal");
+
+  // Image Lightbox State
+  const [lightboxData, setLightboxData] = useState<{ url: string; fileName: string; messageId?: string; chatName?: string } | null>(null);
+  const [lightboxFilter, setLightboxFilter] = useState("none");
+  const [lightboxRotation, setLightboxRotation] = useState(0);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
   // Favorites View States (ui 11.png and ui 12.png)
   const [favoritesSearch, setFavoritesSearch] = useState("");
   const [favoritesTab, setFavoritesTab] = useState<string>("All");
@@ -2109,8 +2211,14 @@ export default function Home() {
           </div>
 
           {/* Chat Messages Body */}
-          <div className={styles.chatPanelBody}>
-            <span className={styles.chatDaySeparator}>Today</span>
+          <div className={styles.chatPanelBody} style={{ position: "relative" }}>
+            <StarParticlesCanvas 
+              enabled={settingsStarEnabled} 
+              intensity={settingsStarIntensity} 
+              speed={settingsStarSpeed} 
+              isDark={settingsDarkMode} 
+            />
+            <span className={styles.chatDaySeparator} style={{ zIndex: 1, position: "relative" }}>Today</span>
 
             {activeMessages.map((msg) => (
               <div
@@ -2118,6 +2226,7 @@ export default function Home() {
                 className={`${styles.chatBubble} ${
                   msg.sender === "you" ? styles.chatBubbleOutgoing : styles.chatBubbleIncoming
                 }`}
+                style={{ zIndex: 1, position: "relative" }}
               >
                 {msg.text && <span>{msg.text}</span>}
                 
@@ -2136,16 +2245,40 @@ export default function Home() {
                             src={fileUrl} 
                             alt={msg.file_name} 
                             style={{ width: "100%", height: "auto", maxHeight: "240px", objectFit: "cover", cursor: "pointer" }}
-                            onClick={() => window.open(fileUrl, "_blank")}
+                            onClick={() => {
+                              setLightboxData({
+                                url: fileUrl,
+                                fileName: msg.file_name || "attachment.png",
+                                messageId: msg.id,
+                                chatName: activeChat
+                              });
+                              setLightboxFilter("none");
+                              setLightboxRotation(0);
+                            }}
                           />
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", backgroundColor: "rgba(0,0,0,0.05)" }}>
                             <span style={{ fontSize: "11px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>{msg.file_name}</span>
-                            <a href={fileUrl} download={msg.file_name} className={styles.downloadBtn} style={{ fontSize: "11px", padding: "2px 6px", textDecoration: "none" }}>
-                              <ArrowDown size={12} /> Download
-                            </a>
+                            <button 
+                              type="button"
+                              onClick={() => {
+                                setLightboxData({
+                                  url: fileUrl,
+                                  fileName: msg.file_name || "attachment.png",
+                                  messageId: msg.id,
+                                  chatName: activeChat
+                                });
+                                setLightboxFilter("none");
+                                setLightboxRotation(0);
+                              }} 
+                              className={styles.downloadBtn} 
+                              style={{ fontSize: "11px", padding: "2px 6px", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                            >
+                              <Eye size={12} /> View
+                            </button>
                           </div>
                         </div>
                       );
+
                     } else if (isVideo) {
                       return (
                         <div style={{ marginTop: "8px", maxWidth: "320px", borderRadius: "8px", overflow: "hidden" }}>
@@ -2975,8 +3108,59 @@ export default function Home() {
                     </label>
                   </div>
                 </div>
+
+                {/* Chat Atmosphere & Particles Settings */}
+                <span className={styles.settingsGroupTitle} style={{ marginTop: "24px" }}>Chat Atmosphere & Effects</span>
+                <div className={styles.settingsCard}>
+                  <div className={styles.settingsRow}>
+                    <div className={styles.settingsRowLeft}>
+                      <span className={styles.settingsRowTitle}>Chat Star Particles (Dark Mode)</span>
+                      <span className={styles.settingsRowDesc}>Render dynamic twinkling stars in dark mode chat background</span>
+                    </div>
+                    <label className={styles.switchContainer}>
+                      <input 
+                        type="checkbox" 
+                        className={styles.switchInput}
+                        checked={settingsStarEnabled}
+                        onChange={(e) => setSettingsStarEnabled(e.target.checked)}
+                      />
+                      <span className={styles.switchSlider} />
+                    </label>
+                  </div>
+
+                  {settingsStarEnabled && (
+                    <>
+                      <div className={styles.settingsFormGroup} style={{ marginTop: "12px" }}>
+                        <label className={styles.settingsLabel}>Star Intensity / Density</label>
+                        <select 
+                          className={styles.settingsSelect}
+                          value={settingsStarIntensity}
+                          onChange={(e) => setSettingsStarIntensity(e.target.value)}
+                        >
+                          <option value="Low">Low (Subtle stars)</option>
+                          <option value="Medium">Medium (Balanced galaxy)</option>
+                          <option value="High">High (Dense starlight)</option>
+                        </select>
+                      </div>
+
+                      <div className={styles.settingsFormGroup} style={{ marginTop: "12px" }}>
+                        <label className={styles.settingsLabel}>Twinkle & Motion Speed</label>
+                        <select 
+                          className={styles.settingsSelect}
+                          value={settingsStarSpeed}
+                          onChange={(e) => setSettingsStarSpeed(e.target.value)}
+                        >
+                          <option value="Slow">Slow (Calm drift)</option>
+                          <option value="Normal">Normal (Smooth twinkle)</option>
+                          <option value="Fast">Fast (Energetic motion)</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             )}
+
 
             {settingsSubCategory === "Network" && (
               <div className={styles.settingsGroup} style={{ animation: "fade-in 0.3s ease-out" }}>
@@ -3210,6 +3394,176 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* In-App Image Lightbox Modal */}
+      {lightboxData && (
+        <div 
+          className={styles.modalOverlay} 
+          style={{ zIndex: 300, backgroundColor: "rgba(0, 0, 0, 0.9)", backdropFilter: "blur(16px)", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "20px" }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setLightboxData(null);
+          }}
+        >
+          {/* Lightbox Top Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", maxWidth: "900px", margin: "0 auto", color: "#FFF" }}>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontWeight: 600, fontSize: "15px" }}>{lightboxData.fileName}</span>
+              <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Attachment preview</span>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => setLightboxData(null)}
+              style={{ color: "#FFF", padding: "8px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Center High-Res Image Preview */}
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", padding: "20px" }}>
+            <img 
+              src={lightboxData.url} 
+              alt={lightboxData.fileName} 
+              style={{ 
+                maxWidth: "100%", 
+                maxHeight: "75vh", 
+                objectFit: "contain", 
+                borderRadius: "12px",
+                filter: lightboxFilter,
+                transform: `rotate(${lightboxRotation}deg)`,
+                transition: "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+                boxShadow: "0 20px 50px rgba(0,0,0,0.5)"
+              }}
+            />
+          </div>
+
+          {/* Bottom Action Bar */}
+          <div style={{ width: "100%", maxWidth: "650px", margin: "0 auto", backgroundColor: "#121318", border: "1px solid #1F212A", borderRadius: "16px", padding: "12px 20px", display: "flex", justifyContent: "space-around", alignItems: "center", gap: "12px", boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}>
+            {/* Edit / Filter Button */}
+            <button 
+              type="button"
+              onClick={() => {
+                const filters = ["none", "grayscale(100%)", "sepia(100%)", "invert(100%)", "brightness(130%)"];
+                const nextIdx = (filters.indexOf(lightboxFilter) + 1) % filters.length;
+                const nextFilter = filters[nextIdx];
+                setLightboxFilter(nextFilter);
+                toast.info(`Applied filter: ${nextFilter}`);
+              }}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", color: lightboxFilter !== "none" ? "var(--primary)" : "#A0A5B5", fontSize: "11px", background: "none", border: "none", cursor: "pointer" }}
+            >
+              <Edit3 size={18} />
+              <span>Edit Filter</span>
+            </button>
+
+            {/* Rotate Button */}
+            <button 
+              type="button"
+              onClick={() => {
+                setLightboxRotation((prev) => (prev + 90) % 360);
+              }}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", color: "#A0A5B5", fontSize: "11px", background: "none", border: "none", cursor: "pointer" }}
+            >
+              <RotateCw size={18} />
+              <span>Rotate</span>
+            </button>
+
+            {/* Share / Forward to Chat Button */}
+            <button 
+              type="button"
+              onClick={() => {
+                setIsShareModalOpen(true);
+              }}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", color: "#3B82F6", fontSize: "11px", background: "none", border: "none", cursor: "pointer" }}
+            >
+              <Share2 size={18} />
+              <span>Share in Chat</span>
+            </button>
+
+            {/* Download Button */}
+            <a 
+              href={lightboxData.url} 
+              download={lightboxData.fileName}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", color: "#10B981", fontSize: "11px", textDecoration: "none" }}
+            >
+              <ArrowDown size={18} />
+              <span>Download</span>
+            </a>
+
+            {/* Delete Button */}
+            {lightboxData.messageId && (
+              <button 
+                type="button"
+                onClick={() => {
+                  if (lightboxData.messageId && lightboxData.chatName) {
+                    const targetChat = lightboxData.chatName;
+                    setChatMessages((prev) => ({
+                      ...prev,
+                      [targetChat]: (prev[targetChat] || []).filter((m) => m.id !== lightboxData.messageId)
+                    }));
+                    toast.success("Image deleted from chat");
+                    setLightboxData(null);
+                  }
+                }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", color: "#EF4444", fontSize: "11px", background: "none", border: "none", cursor: "pointer" }}
+              >
+                <Trash2 size={18} />
+                <span>Delete</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Share to Contact Modal */}
+      {isShareModalOpen && lightboxData && (
+        <div className={styles.modalOverlay} style={{ zIndex: 400 }}>
+          <div className={styles.modalContent} style={{ maxWidth: "400px" }}>
+            <span className={styles.modalTitle}>Forward Attachment to Chat</span>
+            <span style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "16px" }}>Select contact to send "{lightboxData.fileName}"</span>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "250px", overflowY: "auto", marginBottom: "20px" }}>
+              {recentChats.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => {
+                    const newMsg: ChatMessage = {
+                      id: Date.now().toString(),
+                      sender: "you",
+                      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                      file: lightboxData.url,
+                      file_name: lightboxData.fileName,
+                      file_type: "image/png"
+                    };
+                    setChatMessages((prev) => ({
+                      ...prev,
+                      [c.name]: [...(prev[c.name] || []), newMsg]
+                    }));
+                    toast.success(`Image forwarded to ${c.name}`);
+                    setIsShareModalOpen(false);
+                    setLightboxData(null);
+                  }}
+                  style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 12px", borderRadius: "8px", backgroundColor: "var(--bg-app)", border: "1px solid var(--border-color)", cursor: "pointer", textAlign: "left", color: "var(--text-primary)" }}
+                >
+                  <MessageSquare size={16} color="var(--primary)" />
+                  <span style={{ fontSize: "13px", fontWeight: 600 }}>{c.name}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className={styles.modalActions}>
+              <button 
+                type="button" 
+                className={styles.modalBtnCancel} 
+                onClick={() => setIsShareModalOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
