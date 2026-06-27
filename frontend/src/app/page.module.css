@@ -1200,8 +1200,8 @@
   background-color: rgba(248, 249, 253, 0.2);
 }
 
-.dark .chatPanelBody {
-  background-color: rgba(0, 0, 0, 0.1);
+.dark .chatPanelBody, :global(.dark) .chatPanelBody {
+  background-color: #030304;
 }
 
 .chatDaySeparator {
@@ -1264,9 +1264,11 @@
   border: 1px solid var(--border-color);
 }
 
-.dark .chatBubbleIncoming {
-  background-color: #242631;
+.dark .chatBubbleIncoming, :global(.dark) .chatBubbleIncoming {
+  background-color: #12131A;
+  border-color: var(--border-color);
 }
+
 
 .chatBubbleOutgoing {
   align-self: flex-end;
@@ -1431,9 +1433,10 @@
   padding: 4px 6px 4px 16px;
 }
 
-.dark .chatInputWrapper {
-  background-color: #181920;
+.dark .chatInputWrapper, :global(.dark) .chatInputWrapper {
+  background-color: #0A0B0E;
 }
+
 
 .chatInputIcon {
   color: var(--text-secondary);
