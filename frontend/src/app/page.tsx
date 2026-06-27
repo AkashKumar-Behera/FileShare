@@ -1,4 +1,6 @@
 "use client";
+// Updated chat components & particles
+
 
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
