@@ -1,10 +1,19 @@
-"use client";
-
 import React from "react";
 import styles from "./StatsGrid.module.css";
 import { ArrowUp, ArrowDown, Clock, XCircle } from "lucide-react";
 
-export default function StatsGrid() {
+interface StatsGridProps {
+  transfers: {
+    status: string;
+  }[];
+}
+
+export default function StatsGrid({ transfers }: StatsGridProps) {
+  const totalCount = transfers.length;
+  const completedCount = transfers.filter(t => t.status === "Completed").length;
+  const inProgressCount = transfers.filter(t => t.status === "Transferring" || t.status === "Pending").length;
+  const failedCount = transfers.filter(t => t.status === "Failed").length;
+
   return (
     <div className={styles.grid}>
       {/* Total Transfers Card */}
@@ -14,12 +23,9 @@ export default function StatsGrid() {
         </div>
         <div className={styles.content}>
           <span className={styles.title}>Total Transfers</span>
-          <span className={styles.value}>24</span>
+          <span className={styles.value}>{totalCount}</span>
           <span className={`${styles.subtext} ${styles.trendUp}`}>
-            <span>↑ 8%</span>
-            <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>
-              this week
-            </span>
+            <span>Real-time</span>
           </span>
         </div>
       </div>
@@ -31,8 +37,10 @@ export default function StatsGrid() {
         </div>
         <div className={styles.content}>
           <span className={styles.title}>Completed</span>
-          <span className={styles.value}>18</span>
-          <span className={styles.subtext}>75% success rate</span>
+          <span className={styles.value}>{completedCount}</span>
+          <span className={styles.subtext}>
+            {totalCount > 0 ? `${Math.round((completedCount / totalCount) * 100)}%` : "0%"} success rate
+          </span>
         </div>
       </div>
 
@@ -43,9 +51,9 @@ export default function StatsGrid() {
         </div>
         <div className={styles.content}>
           <span className={styles.title}>In Progress</span>
-          <span className={styles.value}>2</span>
+          <span className={styles.value}>{inProgressCount}</span>
           <span className={`${styles.subtext} ${styles.trendLink}`}>
-            2 active transfers
+            {inProgressCount} active transfers
           </span>
         </div>
       </div>
@@ -57,9 +65,9 @@ export default function StatsGrid() {
         </div>
         <div className={styles.content}>
           <span className={styles.title}>Failed</span>
-          <span className={styles.value}>1</span>
+          <span className={styles.value}>{failedCount}</span>
           <span className={`${styles.subtext} ${styles.failedLink}`}>
-            View details
+            {failedCount} failed attempts
           </span>
         </div>
       </div>

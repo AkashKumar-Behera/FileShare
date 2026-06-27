@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import styles from "./page.module.css";
 import Sidebar from "../components/Sidebar";
+import BottomNav from "../components/BottomNav";
 import Navbar from "../components/Navbar";
 import {
   Search,
@@ -37,7 +38,11 @@ import {
   Settings,
   Wifi,
   Shield,
-  MoreHorizontal
+  MoreHorizontal,
+  LayoutDashboard,
+  ArrowLeftRight,
+  Star,
+  ArrowLeft
 } from "lucide-react";
 
 // Interfaces for UI Data
@@ -55,13 +60,13 @@ interface RecentFileItem {
   fileName: string;
   size: string;
   time: string;
-  type: "zip" | "image" | "pptx" | "txt" | "pdf";
+  type: string;
 }
 
 interface MyFileItem {
   id: string;
   name: string;
-  type: "Folder" | "PPTX" | "JPG" | "PNG" | "MP4" | "TXT" | "PDF" | "RAR" | "ZIP" | "MP3";
+  type: string;
   size: string; // "—" for folder
   dateModified: string;
   filesCount?: number; // for folder only
@@ -72,7 +77,7 @@ interface ReceivedFileItem {
   fileName: string;
   device: string;
   ip: string;
-  type: "ZIP" | "JPG" | "PPTX" | "TXT" | "PDF" | "MP4" | "RAR" | "PNG";
+  type: string;
   size: string;
   timeReceived: string;
   status: "New" | "Downloaded";
@@ -100,15 +105,10 @@ interface ChatMessage {
   sender: "you" | "other";
   text?: string;
   time: string;
-  fileCard?: {
-    name: string;
-    size: string;
-    type: string;
-  };
-  imagesCard?: {
-    count: number;
-    urls: string[];
-  };
+  file?: string;
+  file_name?: string;
+  file_size?: number;
+  file_type?: string;
 }
 
 export default function Home() {
@@ -147,6 +147,7 @@ export default function Home() {
   const [myFilesCategory, setMyFilesCategory] = useState<string>("All");
   const [receivedCategory, setReceivedCategory] = useState<string>("All");
   const [transfersTab, setTransfersTab] = useState<string>("All Transfers");
+  const [transfersSubTab, setTransfersSubTab] = useState<string>("History");
 
   // Selected row checkboxes in My Files page
   const [selectedMyFiles, setSelectedMyFiles] = useState<Record<string, boolean>>({});
@@ -166,9 +167,21 @@ export default function Home() {
   const [editUsernameInput, setEditUsernameInput] = useState("");
   const [editDeviceNameInput, setEditDeviceNameInput] = useState("");
 
+  // Settings View States (ui 9.png)
+  const [settingsDarkMode, setSettingsDarkMode] = useState(false);
+  const [settingsAutoAccept, setSettingsAutoAccept] = useState(true);
+  const [settingsPlaySound, setSettingsPlaySound] = useState(true);
+  const [settingsVisibility, setSettingsVisibility] = useState("everyone");
+  const [settingsPort, setSettingsPort] = useState("8000");
+  const [settingsDownloadPath, setSettingsDownloadPath] = useState("C:\\Downloads\\FileShare");
+  const [settingsClearLogs, setSettingsClearLogs] = useState(false);
+  const [settingsSubCategory, setSettingsSubCategory] = useState("General");
+  // Favorites View States (ui 11.png and ui 12.png)
+  const [favoritesSearch, setFavoritesSearch] = useState("");
+  const [favoritesTab, setFavoritesTab] = useState<string>("All");
   // Scan state
   const [isScanning, setIsScanning] = useState(false);
-  const [activeChat, setActiveChat] = useState<string>("Artemis-PC");
+  const [activeChat, setActiveChat] = useState<string>("");
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
   const [messageInput, setMessageInput] = useState<string>("");
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>({});
@@ -179,6 +192,7 @@ export default function Home() {
 
   // Message scroll anchor ref
   const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -217,6 +231,15 @@ export default function Home() {
       setDeviceName(savedDevice);
       setEditDeviceNameInput(savedDevice);
 
+      let savedTheme = localStorage.getItem("theme");
+      if (savedTheme === "dark" || (!savedTheme && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+        setSettingsDarkMode(true);
+        document.documentElement.classList.add("dark");
+      } else {
+        setSettingsDarkMode(false);
+        document.documentElement.classList.remove("dark");
+      }
+
       // Register device on backend
       fetch(getApiUrl("/devices/register"), {
         method: "POST",
@@ -237,6 +260,7 @@ export default function Home() {
         console.log("Registered self on backend:", data);
         handleRefreshDevices(savedId);
         loadRecentChats(savedId);
+        loadRealTransfers(savedId);
       })
       .catch(err => {
         console.warn("Django backend offline, running in mock LAN mode:", err);
@@ -303,6 +327,79 @@ export default function Home() {
       })
       .catch(err => console.error("Recent chats fetch error:", err));
   };
+
+  // Helper formatting methods
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0 || !bytes) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const getFileExtension = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    return (ext || "bin") as any;
+  };
+
+  const mapTransferStatus = (status: string) => {
+    switch (status) {
+      case "transferring": return "Transferring";
+      case "completed": return "Completed";
+      case "paused": return "Paused";
+      case "failed": return "Failed";
+      default: return "Pending";
+    }
+  };
+
+  const formatEta = (seconds: number) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return [
+      hrs.toString().padStart(2, '0'),
+      mins.toString().padStart(2, '0'),
+      secs.toString().padStart(2, '0')
+    ].join(':');
+  };
+
+  const loadRealTransfers = (myId = deviceId) => {
+    const targetId = myId || deviceId;
+    if (!targetId) return;
+
+    fetch(getApiUrl(`/transfers/device_transfers?device_id=${targetId}`))
+      .then(res => {
+        if (!res.ok) throw new Error("Failed to load transfers");
+        return res.json();
+      })
+      .then((data: any[]) => {
+        const formatted = data.map(t => {
+          const isSender = t.sender_details?.device_id === targetId;
+          const partner = isSender ? t.receiver_details : t.sender_details;
+          const partnerName = partner ? (partner.username || partner.device_name) : "Unknown Device";
+          const partnerIp = partner ? (partner.ip_address || "192.168.1.1") : "192.168.1.1";
+          
+          return {
+            id: t.id.toString(),
+            fileName: t.file_name,
+            device: partnerName,
+            ip: partnerIp,
+            size: formatBytes(t.file_size),
+            progressPercent: Math.round(t.progress * 100),
+            progressDetail: `${formatBytes(t.file_size * t.progress)} / ${formatBytes(t.file_size)}`,
+            speed: t.speed > 0 ? `${t.speed.toFixed(1)} MB/s` : "0.0 MB/s",
+            timeLeft: t.eta ? formatEta(t.eta) : "00:00:00",
+            status: mapTransferStatus(t.status) as any,
+            direction: (isSender ? "send" : "receive") as any,
+            type: getFileExtension(t.file_name),
+            completedOn: t.status === "completed" ? new Date(t.updated_at).toLocaleString() : undefined
+          };
+        });
+        setTransfers(formatted);
+      })
+      .catch(err => console.error("Transfers fetch error:", err));
+  };
+
 
   // Sync profile edits with Django
   const handleSaveProfile = () => {
@@ -426,7 +523,11 @@ export default function Home() {
             id: String(msg.id),
             sender: msg.sender_id === deviceId ? ("you" as const) : ("other" as const),
             text: msg.text,
-            time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            file: msg.file,
+            file_name: msg.file_name,
+            file_size: msg.file_size,
+            file_type: msg.file_type
           };
 
           if (activeChatIdRef.current === msg.chat_id) {
@@ -503,7 +604,11 @@ export default function Home() {
             id: String(m.id),
             sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
             text: m.text,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            file: m.file,
+            file_name: m.file_name,
+            file_size: m.file_size,
+            file_type: m.file_type
           }));
           setChatMessages(prev => ({
             ...prev,
@@ -515,6 +620,16 @@ export default function Home() {
 
     return () => clearInterval(interval);
   }, [activeChatId, deviceId, activeChat]);
+
+  // Periodic polling for transfers list (real data sync)
+  React.useEffect(() => {
+    if (!deviceId) return;
+    loadRealTransfers(deviceId);
+    const interval = setInterval(() => {
+      loadRealTransfers(deviceId);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [deviceId, activePage]);
 
   // Handle local typing triggers over WebSocket
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -632,153 +747,126 @@ export default function Home() {
       });
   };
 
-  // Mock State Data
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !activeChatId) return;
+
+    fetch(getApiUrl("/devices/online_devices"))
+      .then(res => res.json())
+      .then((data: any[]) => {
+        const targetDevice = data.find(d => {
+          const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
+          return displayName === activeChat;
+        });
+
+        if (targetDevice) {
+          const formData = new FormData();
+          formData.append("sender_id", deviceId);
+          Array.from(files).forEach(file => {
+            formData.append("files", file);
+          });
+
+          fetch(getApiUrl(`/chats/${activeChatId}/upload_attachment`), {
+            method: "POST",
+            body: formData
+          })
+          .then(res => {
+            if (!res.ok) throw new Error("Upload failed");
+            return res.json();
+          })
+          .then(msgs => {
+            console.log("Uploaded successfully:", msgs);
+            // Refresh messages list
+            fetch(getApiUrl(`/chats/${activeChatId}/messages`))
+              .then(r => r.json())
+              .then((msgData: any[]) => {
+                const formatted = msgData.map(m => ({
+                  id: String(m.id),
+                  sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
+                  text: m.text,
+                  time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  file: m.file,
+                  file_name: m.file_name,
+                  file_size: m.file_size,
+                  file_type: m.file_type
+                }));
+                setChatMessages(prev => ({
+                  ...prev,
+                  [activeChat]: formatted
+                }));
+              });
+          })
+          .catch(err => {
+            console.error("Upload error:", err);
+            alert("File upload failed!");
+          });
+        }
+      });
+  };
 
   // Mock State Data
-  const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([
-    { id: "act-1", type: "sent", fileName: "Final_Project.zip", device: "Artemis-PC", time: "10:31 AM", size: "25.6 MB" },
-    { id: "act-2", type: "received", fileName: "Photos_Trip", device: "Lab-PC-03", time: "10:28 AM", size: "18.3 MB" },
-    { id: "act-3", type: "sent", fileName: "Presentation.pptx", device: "Android-Phone", time: "Yesterday", size: "18.7 MB" },
-    { id: "act-4", type: "received", fileName: "Notes.txt", device: "DESKTOP-05", time: "2 days ago", size: "2.1 KB" },
-    { id: "act-5", type: "sent", fileName: "Report.pdf", device: "Lab-PC-03", time: "2 days ago", size: "1.2 MB" },
-  ]);
 
-  const [recentFiles, setRecentFiles] = useState<RecentFileItem[]>([
-    { id: "rf-1", fileName: "Final_Project.zip", size: "25.6 MB", time: "10:31 AM", type: "zip" },
-    { id: "rf-2", fileName: "Photos_Trip", size: "18.3 MB", time: "10:28 AM", type: "image" },
-    { id: "rf-3", fileName: "Presentation.pptx", size: "18.7 MB", time: "Yesterday", type: "pptx" },
-    { id: "rf-4", fileName: "Notes.txt", size: "2.1 KB", time: "2 days ago", type: "txt" },
-    { id: "rf-5", fileName: "Report.pdf", size: "1.2 MB", time: "2 days ago", type: "pdf" },
-  ]);
+  // Mock State Data
+  const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([]);
+  const [recentFiles, setRecentFiles] = useState<RecentFileItem[]>([]);
+  const [myFiles, setMyFiles] = useState<MyFileItem[]>([]);
+  const [receivedFiles, setReceivedFiles] = useState<ReceivedFileItem[]>([]);
+  const [transfers, setTransfers] = useState<TransferItem[]>([]);
 
-  const [myFiles, setMyFiles] = useState<MyFileItem[]>([
-    { id: "mf-1", name: "Project-Work", type: "Folder", size: "—", dateModified: "Today 10:30 AM", filesCount: 18 },
-    { id: "mf-2", name: "Presentation.pptx", type: "PPTX", size: "18.7 MB", dateModified: "Yesterday 5:45 PM" },
-    { id: "mf-3", name: "Photos_Trip.jpg", type: "JPG", size: "18.3 MB", dateModified: "Yesterday 10:28 AM" },
-    { id: "mf-4", name: "Birthday_Video.mp4", type: "MP4", size: "55.3 MB", dateModified: "2 days ago 7:22 PM" },
-    { id: "mf-5", name: "Notes.txt", type: "TXT", size: "2.1 KB", dateModified: "2 days ago 9:15 PM" },
-    { id: "mf-6", name: "Report.pdf", type: "PDF", size: "1.2 MB", dateModified: "2 days ago 8:40 PM" },
-    { id: "mf-7", name: "Documents.rar", type: "RAR", size: "32.4 MB", dateModified: "3 days ago 6:10 PM" },
-    { id: "mf-8", name: "Final_Project.zip", type: "ZIP", size: "25.6 MB", dateModified: "3 days ago 10:31 AM" },
-    { id: "mf-9", name: "Favorite_Song.mp3", type: "MP3", size: "6.8 MB", dateModified: "4 days ago 4:15 PM" }
-  ]);
+  React.useEffect(() => {
+    if (transfers.length === 0) return;
 
-  const [receivedFiles, setReceivedFiles] = useState<ReceivedFileItem[]>([
-    { id: "rc-1", fileName: "Final_Project.zip", device: "Artemis-PC", ip: "192.168.1.2", type: "ZIP", size: "25.6 MB", timeReceived: "Today 10:31 AM", status: "New" },
-    { id: "rc-2", fileName: "Photos_Trip", device: "Lab-PC-03", ip: "192.168.1.3", type: "JPG", size: "18.3 MB", timeReceived: "Today 10:28 AM", status: "New" },
-    { id: "rc-3", fileName: "Presentation.pptx", device: "Android-Phone", ip: "192.168.1.8", type: "PPTX", size: "18.7 MB", timeReceived: "Yesterday 5:45 PM", status: "Downloaded" },
-    { id: "rc-4", fileName: "Notes.txt", device: "DESKTOP-05", ip: "192.168.1.10", type: "TXT", size: "2.1 KB", timeReceived: "2 days ago 9:15 PM", status: "Downloaded" },
-    { id: "rc-5", fileName: "Report.pdf", device: "Lab-PC-03", ip: "192.168.1.3", type: "PDF", size: "1.2 MB", timeReceived: "2 days ago 8:40 PM", status: "Downloaded" },
-    { id: "rc-6", fileName: "Birthday_Video.mp4", device: "Android-Phone", ip: "192.168.1.8", type: "MP4", size: "55.3 MB", timeReceived: "3 days ago 7:22 PM", status: "Downloaded" },
-    { id: "rc-7", fileName: "Documents.rar", device: "Artemis-PC", ip: "192.168.1.2", type: "RAR", size: "32.4 MB", timeReceived: "3 days ago 6:10 PM", status: "Downloaded" },
-    { id: "rc-8", fileName: "Screenshot_2024.png", device: "DESKTOP-05", ip: "192.168.1.10", type: "PNG", size: "1.6 MB", timeReceived: "4 days ago 11:05 AM", status: "Downloaded" },
-  ]);
+    // Derived receivedFiles
+    const rx = transfers
+      .filter(t => t.direction === "receive" && t.status === "Completed")
+      .map((t, idx) => ({
+        id: `rc-${idx}`,
+        fileName: t.fileName,
+        device: t.device,
+        ip: t.ip,
+        type: t.type.toUpperCase() as any,
+        size: t.size,
+        timeReceived: t.completedOn || "Just now",
+        status: "Downloaded" as const
+      }));
+    setReceivedFiles(rx);
 
-  const [transfers, setTransfers] = useState<TransferItem[]>([
-    {
-      id: "tr-1",
-      fileName: "Presentation.pptx",
-      device: "Android-Phone",
-      ip: "192.168.1.8",
-      size: "18.7 MB",
-      progressPercent: 65,
-      progressDetail: "12.2 MB / 18.7 MB",
-      speed: "2.4 MB/s",
-      timeLeft: "00:00:03",
-      status: "Transferring",
-      direction: "send",
-      type: "pptx"
-    },
-    {
-      id: "tr-2",
-      fileName: "Birthday_Video.mp4",
-      device: "Lab-PC-03",
-      ip: "192.168.1.3",
-      size: "55.3 MB",
-      progressPercent: 28,
-      progressDetail: "15.6 MB / 55.3 MB",
-      speed: "1.8 MB/s",
-      timeLeft: "00:00:22",
-      status: "Transferring",
-      direction: "send",
-      type: "mp4"
-    },
-    {
-      id: "tr-3",
-      fileName: "Final_Project.zip",
-      device: "Artemis-PC",
-      ip: "192.168.1.2",
-      size: "25.6 MB",
-      progressPercent: 100,
-      progressDetail: "25.6 MB / 25.6 MB",
-      speed: "0.0 MB/s",
-      timeLeft: "00:00:00",
-      status: "Completed",
-      direction: "send",
-      completedOn: "Today 10:31 AM",
-      type: "zip"
-    },
-    {
-      id: "tr-4",
-      fileName: "Photos_Trip",
-      device: "Lab-PC-03",
-      ip: "192.168.1.3",
-      size: "18.3 MB",
-      progressPercent: 100,
-      progressDetail: "18.3 MB / 18.3 MB",
-      speed: "0.0 MB/s",
-      timeLeft: "00:00:00",
-      status: "Completed",
-      direction: "receive",
-      completedOn: "Today 10:28 AM",
-      type: "image"
-    },
-    {
-      id: "tr-5",
-      fileName: "Notes.txt",
-      device: "DESKTOP-05",
-      ip: "192.168.1.10",
-      size: "2.1 KB",
-      progressPercent: 100,
-      progressDetail: "2.1 KB / 2.1 KB",
-      speed: "0.0 MB/s",
-      timeLeft: "00:00:00",
-      status: "Completed",
-      direction: "receive",
-      completedOn: "2 days ago 9:15 PM",
-      type: "txt"
-    },
-    {
-      id: "tr-6",
-      fileName: "Report.pdf",
-      device: "Lab-PC-03",
-      ip: "192.168.1.3",
-      size: "1.2 MB",
-      progressPercent: 100,
-      progressDetail: "1.2 MB / 1.2 MB",
-      speed: "0.0 MB/s",
-      timeLeft: "00:00:00",
-      status: "Completed",
-      direction: "send",
-      completedOn: "2 days ago 8:40 PM",
-      type: "pdf"
-    },
-    {
-      id: "tr-7",
-      fileName: "Broken_Archive.rar",
-      device: "Artemis-PC",
-      ip: "192.168.1.2",
-      size: "45.0 MB",
-      progressPercent: 42,
-      progressDetail: "18.9 MB / 45.0 MB",
-      speed: "0.0 MB/s",
-      timeLeft: "--:--:--",
-      status: "Failed",
-      direction: "send",
-      failedOn: "3 days ago 2:10 PM",
-      type: "rar"
-    }
-  ]);
+    // Derived myFiles
+    const my = transfers
+      .filter(t => t.direction === "send" && t.status === "Completed")
+      .map((t, idx) => ({
+        id: `mf-${idx}`,
+        name: t.fileName,
+        type: t.type.toUpperCase() as any,
+        size: t.size,
+        dateModified: t.completedOn || "Just now"
+      }));
+    setMyFiles(my);
+
+    // Derived recentActivities
+    const act = transfers.slice(0, 5).map((t, idx) => ({
+      id: `act-${idx}`,
+      type: t.direction as any,
+      fileName: t.fileName,
+      device: t.device,
+      time: t.completedOn ? t.completedOn.split(',').pop()?.trim() || "Just now" : "Just now",
+      size: t.size
+    }));
+    setRecentActivities(act);
+
+    // Derived recentFiles
+    const rf = transfers
+      .filter(t => t.status === "Completed")
+      .slice(0, 5)
+      .map((t, idx) => ({
+        id: `rf-${idx}`,
+        fileName: t.fileName,
+        size: t.size,
+        time: t.completedOn ? t.completedOn.split(',').pop()?.trim() || "Just now" : "Just now",
+        type: t.type
+      }));
+    setRecentFiles(rf);
+  }, [transfers]);
 
   // Total counts helper
   const storageTotal = 20;
@@ -1648,310 +1736,217 @@ export default function Home() {
 
 
   // ----------------------------------------------------
-  // RENDER VIEW: Transfers UI (ui (4).jpeg)
+  // RENDER VIEW: Transfers UI (ui 10.png)
   // ----------------------------------------------------
   const renderTransfers = () => {
+    // Filter transfers based on search term
+    const searchedTransfers = transfers.filter(t => {
+      const query = transfersSearch.toLowerCase();
+      return t.fileName.toLowerCase().includes(query) || t.device.toLowerCase().includes(query);
+    });
+
+    // Filter based on "Current" vs "History" sub-tabs
+    const subTabFiltered = searchedTransfers.filter(t => {
+      if (transfersSubTab === "Current") {
+        return t.status === "Transferring" || t.status === "Paused" || (t.status as string) === "Pending";
+      } else {
+        return t.status === "Completed" || t.status === "Failed";
+      }
+    });
+
+    // Filter based on Pill Category (All, In Progress, Completed, Failed)
+    const finalFiltered = subTabFiltered.filter(t => {
+      if (transfersTab === "All Transfers" || transfersTab === "All") return true;
+      if (transfersTab === "In Progress") return t.status === "Transferring" || t.status === "Paused" || (t.status as string) === "Pending";
+      if (transfersTab === "Completed") return t.status === "Completed";
+      if (transfersTab === "Failed") return t.status === "Failed";
+      return true;
+    });
+
     return (
-      <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
-        {/* Header Section */}
-        <div className={styles.pageHeader}>
-          <div className={styles.titleArea}>
-            <h1>Transfers</h1>
-            <span className={styles.subtitle}>Monitor your file transfers in real-time.</span>
-          </div>
-          <div className={styles.headerControls}>
-            <div className={styles.subSearchWrapper}>
-              <Search className={styles.subSearchIcon} />
-              <input
-                type="text"
-                placeholder="Search transfers..."
-                className={styles.subSearchInput}
-                value={transfersSearch}
-                onChange={e => setTransfersSearch(e.target.value)}
-              />
-            </div>
-            <button className={styles.controlButton} title="Filters"><Filter size={16} /></button>
-            <button className={styles.controlButton} title="Options"><MoreVertical size={16} /></button>
-          </div>
-        </div>
-
-        {/* Stats Row */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "24px" }}>
-          <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "16px 20px", cursor: "default" }}>
-            <div className={styles.actionIconWrapper} style={{ borderRadius: "10px" }}>
-              <ArrowUp size={16} />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Total Transfers</span>
-              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>24</span>
-              <span style={{ fontSize: "11px", color: "var(--success)", fontWeight: 600 }}>↑ 8% <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>this week</span></span>
+      <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+        {/* Header and Subtabs Section */}
+        <div className={styles.transfersHeader}>
+          <div className={styles.pageHeader} style={{ marginBottom: 0 }}>
+            <div className={styles.titleArea}>
+              <h1>Transfers</h1>
+              <span className={styles.subtitle}>Track active files sharing and history logs.</span>
             </div>
           </div>
 
-          <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "16px 20px", cursor: "default" }}>
-            <div className={styles.actionIconWrapper} style={{ borderRadius: "10px", backgroundColor: "rgba(59, 130, 246, 0.08)", color: "var(--info)" }}>
-              <ArrowDown size={16} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+            <div className={styles.transfersSubTabs}>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setTransfersSubTab("Current");
+                  setTransfersTab("All");
+                }}
+                className={`${styles.transfersTabBtn} ${transfersSubTab === "Current" ? styles.transfersTabBtnActive : ""}`}
+              >
+                Current
+              </button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setTransfersSubTab("History");
+                  setTransfersTab("All");
+                }}
+                className={`${styles.transfersTabBtn} ${transfersSubTab === "History" ? styles.transfersTabBtnActive : ""}`}
+              >
+                History
+              </button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Completed</span>
-              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>18</span>
-              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>75% success rate</span>
-            </div>
-          </div>
 
-          <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "16px 20px", cursor: "default" }}>
-            <div className={styles.actionIconWrapper} style={{ borderRadius: "10px", backgroundColor: "rgba(94, 92, 230, 0.08)", color: "var(--primary-muted)" }}>
-              <Clock size={16} />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>In Progress</span>
-              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>2</span>
-              <span style={{ fontSize: "11px", color: "var(--primary)" }}>2 active transfers</span>
-            </div>
-          </div>
-
-          <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "16px 20px", cursor: "default" }}>
-            <div className={styles.actionIconWrapper} style={{ borderRadius: "10px", backgroundColor: "var(--danger-light)", color: "var(--danger)" }}>
-              <XCircle size={16} />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Failed</span>
-              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--danger)", fontFamily: "var(--font-family-outfit)" }}>1</span>
-              <span style={{ fontSize: "11px", color: "var(--danger)", fontWeight: 600 }}>View details</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Tab Filters */}
-        <div className={styles.tabsContainer}>
-          {["All Transfers", "In Progress", "Completed", "Failed"].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setTransfersTab(tab)}
-              className={`${styles.tab} ${transfersTab === tab ? styles.activeTab : ""}`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {/* Sub-Section: In Progress Transfers */}
-        {(transfersTab === "All Transfers" || transfersTab === "In Progress") && (
-          <div className={styles.tableSection}>
-            <div className={styles.sectionHeader}>
-              <span className={styles.sectionTitle}>In Progress Transfers ({filteredTransfersInProgress.length})</span>
-            </div>
-            <div className={styles.tableCard}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>File Name</th>
-                    <th>To (Device)</th>
-                    <th>Size</th>
-                    <th>Progress</th>
-                    <th>Speed</th>
-                    <th>Time Left</th>
-                    <th>Status</th>
-                    <th style={{ textAlign: "right" }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTransfersInProgress.map((item) => {
-                    const { icon: IconComponent, className } = getFileIconComponent(item.type);
-                    return (
-                      <tr key={item.id}>
-                        <td>
-                          <div className={styles.fileCell}>
-                            <div className={`${styles.fileIconWrapper} ${className}`}>
-                              <IconComponent size={18} />
-                            </div>
-                            <div className={styles.fileDetails}>
-                              <span className={styles.fileName}>{item.fileName}</span>
-                              <span className={styles.fileMeta}>To {item.device}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <div className={styles.deviceCell}>
-                            <Laptop className={styles.deviceCellIcon} size={16} />
-                            <div className={styles.deviceCellInfo}>
-                              <span className={styles.deviceCellName}>{item.device}</span>
-                              <span className={styles.deviceCellIp}>{item.ip}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td>{item.size}</td>
-                        <td>
-                          <div className={styles.progressCell}>
-                            <div className={styles.progressHeader}>
-                              <span className={styles.progressPercent}>{item.progressPercent}%</span>
-                              <span className={styles.progressDetail}>{item.progressDetail}</span>
-                            </div>
-                            <div className={styles.progressBarTrack}>
-                              <div
-                                className={styles.progressBarFill}
-                                style={{ width: `${item.progressPercent}%` }}
-                              />
-                            </div>
-                          </div>
-                        </td>
-                        <td>{item.speed}</td>
-                        <td>{item.timeLeft}</td>
-                        <td>
-                          <span
-                            className={`${styles.badge} ${
-                              item.status === "Transferring"
-                                ? styles.transferringBadge
-                                : styles.newBadge /* Paused is shown green/teal */
-                            }`}
-                          >
-                            {item.status}
-                          </span>
-                        </td>
-                        <td>
-                          <div className={styles.actionsWrapper}>
-                            <button
-                              className={styles.actionButton}
-                              title={item.status === "Transferring" ? "Pause" : "Resume"}
-                              onClick={() => handleTogglePauseTransfer(item.id)}
-                            >
-                              {item.status === "Transferring" ? <Pause size={14} /> : <Play size={14} />}
-                            </button>
-                            <button
-                              className={`${styles.actionButton} ${styles.actionButtonDanger}`}
-                              title="Cancel"
-                              onClick={() => handleCancelTransfer(item.id)}
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filteredTransfersInProgress.length === 0 && (
-                    <tr>
-                      <td colSpan={8} style={{ padding: "32px", textAlign: "center", color: "var(--text-secondary)" }}>
-                        No active transfers.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Sub-Section: Completed & Failed Transfers */}
-        {(transfersTab === "All Transfers" || transfersTab === "Completed" || transfersTab === "Failed") && (
-          <div className={styles.tableSection}>
-            <div className={styles.sectionHeader}>
-              <span className={styles.sectionTitle}>
-                {transfersTab === "Completed" ? "Completed Transfers" : transfersTab === "Failed" ? "Failed Transfers" : "Completed & Failed Transfers"} (
-                {filteredTransfersCompleted.length + filteredTransfersFailed.length})
-              </span>
-              <button className={styles.sectionLink} onClick={() => {}}>View All</button>
-            </div>
-            <div className={styles.tableCard}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>File Name</th>
-                    <th>To/From (Device)</th>
-                    <th>Size</th>
-                    <th>Finished On</th>
-                    <th>Status</th>
-                    <th style={{ textAlign: "right" }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...filteredTransfersCompleted, ...filteredTransfersFailed].map((item) => {
-                    const { icon: IconComponent, className } = getFileIconComponent(item.type);
-                    return (
-                      <tr key={item.id}>
-                        <td>
-                          <div className={styles.fileCell}>
-                            <div className={`${styles.fileIconWrapper} ${className}`}>
-                              <IconComponent size={18} />
-                            </div>
-                            <div className={styles.fileDetails}>
-                              <span className={styles.fileName}>{item.fileName}</span>
-                              <span className={styles.fileMeta}>
-                                {item.direction === "send" ? "Sent to" : "Received from"} {item.device}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <div className={styles.deviceCell}>
-                            <Laptop className={styles.deviceCellIcon} size={16} />
-                            <div className={styles.deviceCellInfo}>
-                              <span className={styles.deviceCellName}>{item.device}</span>
-                              <span className={styles.deviceCellIp}>{item.ip}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td>{item.size}</td>
-                        <td>{item.completedOn || item.failedOn || "—"}</td>
-                        <td>
-                          <span
-                            className={`${styles.badge} ${
-                              item.status === "Completed" ? styles.completedBadge : styles.failedBadge
-                            }`}
-                          >
-                            {item.status}
-                          </span>
-                        </td>
-                        <td>
-                          <div className={styles.actionsWrapper}>
-                            {item.status === "Completed" && (
-                              <button className={styles.actionButton} title="Open Folder"><FolderOpen size={14} /></button>
-                            )}
-                            <button
-                              className={`${styles.actionButton} ${styles.actionButtonDanger}`}
-                              title="Delete"
-                              onClick={() => handleCancelTransfer(item.id)}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filteredTransfersCompleted.length === 0 && filteredTransfersFailed.length === 0 && (
-                    <tr>
-                      <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "var(--text-secondary)" }}>
-                        No history matching selection.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-              <div className={styles.tableFooter}>
-                <span className={styles.footerText}>
-                  Showing 1 to {filteredTransfersCompleted.length + filteredTransfersFailed.length} of {transfers.length} entries
-                </span>
-                <button className={styles.sectionLink} onClick={() => {}}>View All Completed</button>
+            <div className={styles.transfersSearchRow}>
+              <div className={styles.transfersSearchWrapper}>
+                <Search size={16} className={styles.transfersSearchIcon} />
+                <input 
+                  type="text" 
+                  placeholder="Search transfers..." 
+                  className={styles.transfersSearchInput}
+                  value={transfersSearch}
+                  onChange={(e) => setTransfersSearch(e.target.value)}
+                />
               </div>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Tip Bar */}
-        {showTip && (
-          <div className={styles.tipBar}>
-            <div className={styles.tipContent}>
-              <Info className={styles.tipIcon} size={20} />
-              <span className={styles.tipText}>
-                <strong>Transfer Tip:</strong> Keep devices on the same network for faster transfer speeds and better stability.
-              </span>
+        {/* Filter Category Pills */}
+        <div className={styles.transfersPillsRow}>
+          {[
+            { id: "All", label: "All" },
+            ...(transfersSubTab === "Current" ? [{ id: "In Progress", label: "In Progress" }] : []),
+            ...(transfersSubTab === "History" ? [{ id: "Completed", label: "Completed" }, { id: "Failed", label: "Failed" }] : [])
+          ].map(pill => {
+            const activeId = transfersTab === "All Transfers" ? "All" : transfersTab;
+            const isActive = activeId === pill.id;
+            return (
+              <button
+                key={pill.id}
+                type="button"
+                onClick={() => setTransfersTab(pill.id === "All" ? "All Transfers" : pill.id)}
+                className={`${styles.transfersPill} ${isActive ? styles.transfersPillActive : ""}`}
+              >
+                {pill.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Transfers Cards List */}
+        <div className={styles.transfersList}>
+          {finalFiltered.map(item => {
+            const { icon: IconComponent, className } = getFileIconComponent(item.type);
+            const isCompleted = item.status === "Completed";
+            const isFailed = item.status === "Failed";
+            const isPaused = item.status === "Paused";
+
+            return (
+              <div key={item.id} className={styles.transferCard}>
+                {/* File Icon */}
+                <div className={`${styles.fileIconWrapper} ${className}`} style={{ width: "44px", height: "44px", borderRadius: "10px", flexShrink: 0 }}>
+                  <IconComponent size={20} />
+                </div>
+
+                {/* Details */}
+                <div className={styles.transferInfo}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span className={styles.transferName}>{item.fileName}</span>
+                    <span className={styles.transferDeviceMeta} style={{ fontWeight: 600 }}>{item.size}</span>
+                  </div>
+                  <span className={styles.transferDeviceMeta}>{item.device} &bull; {item.ip}</span>
+
+                  {/* Active Transfer Details */}
+                  {!isCompleted && !isFailed && (
+                    <>
+                      <div className={styles.chatActiveTransfersBarWrapper} style={{ marginTop: "6px", height: "6px" }}>
+                        <div 
+                          className={styles.chatActiveTransfersBarFill} 
+                          style={{ width: `${item.progressPercent}%` }} 
+                        />
+                      </div>
+                      <div className={styles.transferSpeedEta}>
+                        <span>{item.progressPercent}% &bull; {item.progressDetail || "Calculating..."}</span>
+                        <span>{item.speed} &bull; {item.timeLeft}</span>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Historical Details */}
+                  {isCompleted && (
+                    <span className={`${styles.transferStatusText} ${styles.transferStatusCompleted}`} style={{ marginTop: "4px" }}>
+                      &bull; Completed on {item.completedOn || "Just now"}
+                    </span>
+                  )}
+
+                  {isFailed && (
+                    <span className={`${styles.transferStatusText} ${styles.transferStatusFailed}`} style={{ marginTop: "4px" }}>
+                      &bull; Failed on {item.failedOn || "Just now"}
+                    </span>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className={styles.transferActions}>
+                  {!isCompleted && !isFailed && (
+                    <>
+                      <button 
+                        onClick={() => handleTogglePauseTransfer(item.id)}
+                        className={styles.actionButton} 
+                        title={isPaused ? "Resume" : "Pause"}
+                      >
+                        {isPaused ? <Play size={14} /> : <Pause size={14} />}
+                      </button>
+                      <button 
+                        onClick={() => handleCancelTransfer(item.id)}
+                        className={styles.actionButton} 
+                        style={{ color: "var(--error)", backgroundColor: "var(--danger-light)" }}
+                        title="Cancel"
+                      >
+                        <X size={14} />
+                      </button>
+                    </>
+                  )}
+
+                  {isCompleted && (
+                    <button className={styles.actionButton} title="Open Folder">
+                      <FolderOpen size={14} />
+                    </button>
+                  )}
+
+                  {isFailed && (
+                    <button 
+                      onClick={() => handleTogglePauseTransfer(item.id)}
+                      className={styles.scanBtn}
+                      style={{ padding: "6px 12px", fontSize: "11px" }}
+                    >
+                      Retry
+                    </button>
+                  )}
+
+                  {(isCompleted || isFailed) && (
+                    <button 
+                      onClick={() => handleCancelTransfer(item.id)}
+                      className={styles.actionButton} 
+                      style={{ color: "var(--error)", backgroundColor: "var(--danger-light)" }}
+                      title="Delete History log"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {finalFiltered.length === 0 && (
+            <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--text-secondary)", backgroundColor: "var(--bg-card)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)" }}>
+              No transfers match these filters.
             </div>
-            <button className={styles.closeTipButton} onClick={() => setShowTip(false)}>
-              <X size={16} />
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   };
@@ -1963,10 +1958,12 @@ export default function Home() {
     const activeMessages = chatMessages[activeChat] || [];
     const activeDeviceObj = nearbyDevices.find(d => d.name === activeChat) || { name: activeChat, status: "online", ip: "192.168.1.1" };
 
+    const hasActiveChat = activeChat !== "";
+
     return (
-      <div className={`${styles.chatContainer} animate-fade-in`}>
+      <div className={`${styles.chatContainer} ${hasActiveChat ? styles.chatContainerActive : ""} animate-fade-in`}>
         {/* Left Sub-sidebar (Devices & Recent Chats) */}
-        <div className={styles.chatSidebar}>
+        <div className={`${styles.chatSidebar} ${hasActiveChat ? styles.chatSidebarHiddenMobile : ""}`}>
           <div className={styles.chatSidebarHeader}>
             <span className={styles.chatSidebarTitle}>Nearby Devices</span>
             <button
@@ -2040,13 +2037,23 @@ export default function Home() {
         </div>
 
         {/* Right Chat Panel */}
-        <div className={styles.chatPanel}>
-          {/* Header */}
-          <div className={styles.chatPanelHeader}>
-            <div className={styles.chatPanelHeaderLeft}>
-              <div className={styles.chatPanelAvatar}>
-                <Laptop size={18} />
-              </div>
+        <div className={`${styles.chatPanel} ${!hasActiveChat ? styles.chatPanelHiddenMobile : ""}`}>
+          {hasActiveChat ? (
+            <>
+              {/* Header */}
+              <div className={styles.chatPanelHeader}>
+                <div className={styles.chatPanelHeaderLeft}>
+                  {/* Mobile Back Button */}
+                  <button 
+                    onClick={() => setActiveChat("")} 
+                    className={styles.mobileBackBtn}
+                    title="Back to Device list"
+                  >
+                    <ArrowLeft size={18} />
+                  </button>
+                  <div className={styles.chatPanelAvatar}>
+                    <Laptop size={18} />
+                  </div>
               <div className={styles.chatPanelInfo}>
                 <span className={styles.chatPanelName}>{activeChat}</span>
                 <span className={styles.chatPanelStatus}>
@@ -2080,40 +2087,79 @@ export default function Home() {
               >
                 {msg.text && <span>{msg.text}</span>}
                 
-                {/* File Attachment Card */}
-                {msg.fileCard && (
-                  <div className={styles.chatFileCard}>
-                    <div className={styles.chatFileHeader}>
-                      <div className={`${styles.fileIconWrapper} ${styles.zipIcon}`} style={{ width: "32px", height: "32px", borderRadius: "6px" }}>
-                        <FolderArchive size={16} />
-                      </div>
-                      <div className={styles.chatFileDetails}>
-                        <span className={styles.chatFileName}>{msg.fileCard.name}</span>
-                        <span className={styles.chatFileSize}>{msg.fileCard.size}</span>
-                      </div>
-                    </div>
-                    <button className={styles.chatFileDownloadBtn}>
-                      <ArrowDown size={14} />
-                      <span>Download</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* Images Attachment Card */}
-                {msg.imagesCard && (
-                  <div className={styles.chatImagesCard}>
-                    <div className={styles.chatImagesGrid}>
-                      {msg.imagesCard.urls.map((url, i) => (
-                        <div key={i} className={styles.chatImageWrapper}>
-                          <img src={url} alt={`attachment-${i}`} className={styles.chatImageThumb} />
+                {/* Real File Attachment Card */}
+                {msg.file && (
+                  (() => {
+                    const isImg = msg.file_type?.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(msg.file_name || "");
+                    const isVideo = msg.file_type?.startsWith("video/") || /\.(mp4|mov|m4v|avi|mkv|webm)$/i.test(msg.file_name || "");
+                    const isAudio = msg.file_type?.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|aac)$/i.test(msg.file_name || "");
+                    const fileUrl = msg.file.startsWith("http") ? msg.file : `http://${window.location.hostname}:8000${msg.file}`;
+                    
+                    if (isImg) {
+                      return (
+                        <div style={{ marginTop: "8px", maxWidth: "320px", borderRadius: "8px", overflow: "hidden" }}>
+                          <img 
+                            src={fileUrl} 
+                            alt={msg.file_name} 
+                            style={{ width: "100%", height: "auto", maxHeight: "240px", objectFit: "cover", cursor: "pointer" }}
+                            onClick={() => window.open(fileUrl, "_blank")}
+                          />
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", backgroundColor: "rgba(0,0,0,0.05)" }}>
+                            <span style={{ fontSize: "11px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>{msg.file_name}</span>
+                            <a href={fileUrl} download={msg.file_name} className={styles.downloadBtn} style={{ fontSize: "11px", padding: "2px 6px", textDecoration: "none" }}>
+                              <ArrowDown size={12} /> Download
+                            </a>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                    <div className={styles.chatImagesFooter}>
-                      <span className={styles.chatImagesCount}>{msg.imagesCard.count} Images</span>
-                      <button className={styles.chatImagesDownloadAll}>Download All</button>
-                    </div>
-                  </div>
+                      );
+                    } else if (isVideo) {
+                      return (
+                        <div style={{ marginTop: "8px", maxWidth: "320px", borderRadius: "8px", overflow: "hidden" }}>
+                          <video 
+                            src={fileUrl} 
+                            controls 
+                            style={{ width: "100%", height: "auto", maxHeight: "240px" }}
+                          />
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", backgroundColor: "rgba(0,0,0,0.05)" }}>
+                            <span style={{ fontSize: "11px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>{msg.file_name}</span>
+                            <a href={fileUrl} download={msg.file_name} className={styles.downloadBtn} style={{ fontSize: "11px", padding: "2px 6px", textDecoration: "none" }}>
+                              <ArrowDown size={12} /> Download
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    } else if (isAudio) {
+                      return (
+                        <div style={{ marginTop: "8px", maxWidth: "280px" }}>
+                          <audio src={fileUrl} controls style={{ width: "100%" }} />
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px" }}>
+                            <span style={{ fontSize: "10px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{msg.file_name}</span>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className={styles.fileAttachmentCard}>
+                          <div className={styles.fileIconContainer}>
+                            <FolderArchive size={20} />
+                          </div>
+                          <div className={styles.fileDetails}>
+                            <span className={styles.fileName}>{msg.file_name}</span>
+                            <span className={styles.fileSize}>{formatBytes(msg.file_size || 0)}</span>
+                          </div>
+                          <a 
+                            href={fileUrl} 
+                            download={msg.file_name} 
+                            className={styles.downloadBtn}
+                            style={{ display: "flex", alignItems: "center", textDecoration: "none" }}
+                          >
+                            <ArrowDown size={14} />
+                            <span style={{ marginLeft: "4px" }}>Download</span>
+                          </a>
+                        </div>
+                      );
+                    }
+                  })()
                 )}
                 
                 <span className={styles.chatBubbleTime}>
@@ -2140,7 +2186,19 @@ export default function Home() {
               </div>
             )}
             <div className={styles.chatInputWrapper}>
-              <button className={styles.chatInputIcon} title="Attach File">
+              <input
+                type="file"
+                multiple
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                style={{ display: "none" }}
+              />
+              <button 
+                type="button" 
+                className={styles.chatInputIcon} 
+                onClick={() => fileInputRef.current?.click()} 
+                title="Attach Files"
+              >
                 <Plus size={20} />
               </button>
               <input
@@ -2157,50 +2215,14 @@ export default function Home() {
                 <Send size={16} style={{ transform: "rotate(45deg)", marginLeft: "-2px" }} />
               </button>
             </div>
-
-            {/* Bottom Active Transfers Widget inside Chats */}
-            <div className={styles.chatActiveTransfersWidget}>
-              <div className={styles.chatActiveTransfersHeader}>
-                <Activity size={14} />
-                <span>Active Transfers (1)</span>
-              </div>
-              <div className={styles.chatActiveTransfersRow}>
-                <div className={styles.chatActiveTransfersLeft}>
-                  <div className={`${styles.fileIconWrapper} ${styles.pptxIcon}`} style={{ width: "32px", height: "32px", borderRadius: "6px" }}>
-                    <FileText size={16} />
-                  </div>
-                  <div className={styles.chatActiveTransfersMeta}>
-                    <span className={styles.chatActiveTransfersName}>Presentation.pptx</span>
-                    <span className={styles.chatActiveTransfersSize}>18.7 MB</span>
-                  </div>
-                </div>
-
-                <div className={styles.chatActiveTransfersProgress}>
-                  <span>65%</span>
-                  <div className={styles.chatActiveTransfersBarWrapper}>
-                    <div className={styles.chatActiveTransfersBarFill} style={{ width: "65%" }} />
-                  </div>
-                  <span className={styles.chatActiveTransfersSpeed}>12.2 MB / 18.7 MB</span>
-                </div>
-
-                <span className={styles.chatActiveTransfersSpeed} style={{ fontWeight: 600 }}>2.4 MB/s</span>
-
-                <div className={styles.chatActiveTransfersActions}>
-                  <button className={styles.actionButton} style={{ width: "28px", height: "28px" }} title="Pause">
-                    <Pause size={12} />
-                  </button>
-                  <button className={styles.actionButton} style={{ width: "28px", height: "28px" }} title="Cancel">
-                    <X size={12} />
-                  </button>
-                </div>
-              </div>
-              
-              <button className={styles.chatActiveTransfersLink} onClick={() => setActivePage("Transfers")}>
-                <span>View All Transfers</span>
-                <span>&rarr;</span>
-              </button>
-            </div>
           </div>
+          </>
+          ) : (
+            <div style={{ display: "flex", flex: 1, flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-secondary)", gap: "12px", padding: "48px 24px" }}>
+              <MessageSquare size={48} style={{ color: "var(--border-color)" }} />
+              <span style={{ fontSize: "14px", fontWeight: 600 }}>Select a device to start chatting</span>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -2529,6 +2551,401 @@ export default function Home() {
     );
   };
 
+  // ----------------------------------------------------
+  // RENDER VIEW: Favorites UI (ui 11.png and ui 12.png)
+  // ----------------------------------------------------
+  const renderFavorites = () => {
+    // Premium mock favorites lists
+    const favDevices = [
+      { name: "Artemis-PC", ip: "192.168.1.2", type: "Windows", lastSeen: "Just now", status: "Online" },
+      { name: "Android-Phone", ip: "192.168.1.8", type: "Android", lastSeen: "2 min ago", status: "Online" }
+    ];
+
+    const favFiles = [
+      { name: "Final_Project.zip", type: "ZIP", size: "25.6 MB", date: "Today 10:31 AM" },
+      { name: "Presentation.pptx", type: "PPTX", size: "18.7 MB", date: "Yesterday 5:45 PM" }
+    ];
+
+    const favChats = [
+      { name: "Lab-PC-03", lastMsg: "See you tomorrow!", time: "10:28 AM", unread: 2 },
+      { name: "iPhone-14", lastMsg: "File received, thanks!", time: "Yesterday", unread: 0 }
+    ];
+
+    // Filter by search query
+    const filteredDevices = favDevices.filter(d => 
+      d.name.toLowerCase().includes(favoritesSearch.toLowerCase()) || 
+      d.ip.toLowerCase().includes(favoritesSearch.toLowerCase())
+    );
+
+    const filteredFiles = favFiles.filter(f => 
+      f.name.toLowerCase().includes(favoritesSearch.toLowerCase())
+    );
+
+    const filteredChats = favChats.filter(c => 
+      c.name.toLowerCase().includes(favoritesSearch.toLowerCase()) || 
+      c.lastMsg.toLowerCase().includes(favoritesSearch.toLowerCase())
+    );
+
+    const showAll = favoritesTab === "All";
+    const showDevices = favoritesTab === "Devices" || showAll;
+    const showFiles = favoritesTab === "Files" || showAll;
+    const showChats = favoritesTab === "Chats" || showAll;
+
+    return (
+      <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+        {/* Header Section */}
+        <div className={styles.pageHeader}>
+          <div className={styles.titleArea}>
+            <h1 style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <Star size={24} style={{ fill: "var(--primary)", color: "var(--primary)" }} />
+              Favorites
+            </h1>
+            <span className={styles.subtitle}>Quick access to your preferred devices, files, and chats.</span>
+          </div>
+
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", width: "100%", justifyContent: "space-between" }}>
+            <div className={styles.transfersSubTabs} style={{ margin: 0 }}>
+              {["All", "Devices", "Files", "Chats"].map(tab => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setFavoritesTab(tab)}
+                  className={`${styles.transfersTabBtn} ${favoritesTab === tab ? styles.transfersTabBtnActive : ""}`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            <div className={styles.transfersSearchWrapper} style={{ maxWidth: "320px", width: "100%" }}>
+              <Search size={16} className={styles.transfersSearchIcon} />
+              <input
+                type="text"
+                placeholder="Search favorites..."
+                className={styles.transfersSearchInput}
+                value={favoritesSearch}
+                onChange={(e) => setFavoritesSearch(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Favourites Grid */}
+        <div className={styles.favoritesGrid}>
+          {/* Favourites Devices */}
+          {showDevices && (
+            <div className={styles.favoritesColumn}>
+              <div className={styles.favoritesSectionHeader}>
+                <Monitor size={18} style={{ color: "var(--primary)" }} />
+                <span className={styles.favoritesSectionTitle}>Favourite Devices ({filteredDevices.length})</span>
+              </div>
+              {filteredDevices.map((d, i) => (
+                <div key={i} className={styles.favoriteItemCard} onClick={() => {
+                  setActivePage("Chats");
+                  setActiveChat(d.name);
+                }} style={{ cursor: "pointer" }}>
+                  <div className={styles.settingsAvatarWrapper} style={{ width: "40px", height: "40px", fontSize: "14px" }}>
+                    {d.name.charAt(0)}
+                  </div>
+                  <div className={styles.favoriteItemInfo}>
+                    <span className={styles.favoriteItemTitle}>{d.name}</span>
+                    <span className={styles.favoriteItemSubtitle}>{d.ip} &bull; {d.status}</span>
+                  </div>
+                  <div className={styles.favoriteBadge}>{d.type}</div>
+                </div>
+              ))}
+              {filteredDevices.length === 0 && (
+                <div style={{ padding: "16px", textAlign: "center", color: "var(--text-secondary)", fontSize: "12px" }}>
+                  No favourite devices found.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Favourites Files */}
+          {showFiles && (
+            <div className={styles.favoritesColumn}>
+              <div className={styles.favoritesSectionHeader}>
+                <FileText size={18} style={{ color: "var(--primary)" }} />
+                <span className={styles.favoritesSectionTitle}>Favourite Files ({filteredFiles.length})</span>
+              </div>
+              {filteredFiles.map((f, i) => (
+                <div key={i} className={styles.favoriteItemCard}>
+                  <div className={styles.fileIconContainer} style={{ width: "36px", height: "36px" }}>
+                    <FolderArchive size={16} />
+                  </div>
+                  <div className={styles.favoriteItemInfo}>
+                    <span className={styles.favoriteItemTitle}>{f.name}</span>
+                    <span className={styles.favoriteItemSubtitle}>{f.size} &bull; {f.date}</span>
+                  </div>
+                  <div className={styles.favoriteBadge}>{f.type}</div>
+                </div>
+              ))}
+              {filteredFiles.length === 0 && (
+                <div style={{ padding: "16px", textAlign: "center", color: "var(--text-secondary)", fontSize: "12px" }}>
+                  No favourite files found.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Favourites Chats */}
+          {showChats && (
+            <div className={styles.favoritesColumn}>
+              <div className={styles.favoritesSectionHeader}>
+                <MessageSquare size={18} style={{ color: "var(--primary)" }} />
+                <span className={styles.favoritesSectionTitle}>Favourite Chats ({filteredChats.length})</span>
+              </div>
+              {filteredChats.map((c, i) => (
+                <div key={i} className={styles.favoriteItemCard} onClick={() => {
+                  setActivePage("Chats");
+                  setActiveChat(c.name);
+                }} style={{ cursor: "pointer" }}>
+                  <div className={styles.settingsAvatarWrapper} style={{ width: "40px", height: "40px", fontSize: "14px", backgroundColor: "rgba(59, 130, 246, 0.1)", color: "var(--info)", borderColor: "var(--info)" }}>
+                    {c.name.charAt(0)}
+                  </div>
+                  <div className={styles.favoriteItemInfo}>
+                    <span className={styles.favoriteItemTitle}>{c.name}</span>
+                    <span className={styles.favoriteItemSubtitle} style={{ fontWeight: c.unread > 0 ? "600" : "400" }}>{c.lastMsg}</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                    <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>{c.time}</span>
+                    {c.unread > 0 && (
+                      <div className={styles.chatActiveTransfersBarFill} style={{ width: "16px", height: "16px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", color: "white", fontWeight: "700" }}>
+                        {c.unread}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {filteredChats.length === 0 && (
+                <div style={{ padding: "16px", textAlign: "center", color: "var(--text-secondary)", fontSize: "12px" }}>
+                  No favourite chats found.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ----------------------------------------------------
+  // RENDER VIEW: Settings UI (ui 9.png)
+  // ----------------------------------------------------
+  const renderSettings = () => {
+    const menuItems = [
+      { id: "General", label: "General Preferences" },
+      { id: "Network", label: "Network & Security" },
+      { id: "Storage", label: "Storage Settings" },
+      { id: "About", label: "About FileShare" }
+    ];
+
+    return (
+      <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+        {/* Header Section */}
+        <div className={styles.pageHeader}>
+          <div className={styles.titleArea}>
+            <h1>Settings</h1>
+            <span className={styles.subtitle}>Configure your local file-sharing preferences.</span>
+          </div>
+        </div>
+
+        <div className={styles.settingsSplitWrapper}>
+          {/* Left Column Pane */}
+          <div className={styles.settingsLeftPane}>
+            {/* User Profile Card */}
+            <div className={styles.settingsProfileCard} style={{ flexDirection: "column", alignItems: "center", textAlign: "center", padding: "20px" }}>
+              <div className={styles.settingsAvatarWrapper} style={{ margin: "0 auto" }}>
+                {username ? username.charAt(0).toUpperCase() : "Y"}
+              </div>
+              <div className={styles.settingsProfileInfo} style={{ alignItems: "center", marginTop: "12px" }}>
+                <span className={styles.settingsProfileName}>{username}</span>
+                <span className={styles.settingsProfileDevice}>{deviceName}</span>
+              </div>
+              <button 
+                className={styles.scanBtn} 
+                style={{ width: "100%", marginTop: "16px", padding: "8px" }}
+                onClick={() => {
+                  setEditUsernameInput(username);
+                  setEditDeviceNameInput(deviceName);
+                  setIsEditModalOpen(true);
+                }}
+              >
+                Edit Profile
+              </button>
+            </div>
+
+            {/* Menu List */}
+            <div className={styles.settingsNavMenu}>
+              {menuItems.map(item => {
+                const isActive = settingsSubCategory === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSettingsSubCategory(item.id)}
+                    className={`${styles.settingsNavItem} ${isActive ? styles.settingsNavItemActive : ""}`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right Column Pane */}
+          <div className={styles.settingsRightPane}>
+            {settingsSubCategory === "General" && (
+              <div className={styles.settingsGroup} style={{ animation: "fade-in 0.3s ease-out" }}>
+                <span className={styles.settingsGroupTitle}>General Preferences</span>
+                <div className={styles.settingsCard}>
+                  <div className={styles.settingsRow}>
+                    <div className={styles.settingsRowLeft}>
+                      <span className={styles.settingsRowTitle}>Dark Mode</span>
+                      <span className={styles.settingsRowDesc}>Use high-contrast dark theme</span>
+                    </div>
+                    <label className={styles.switchContainer}>
+                      <input 
+                        type="checkbox" 
+                        className={styles.switchInput}
+                        checked={settingsDarkMode}
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          setSettingsDarkMode(val);
+                          if (val) {
+                            document.documentElement.classList.add("dark");
+                            localStorage.setItem("theme", "dark");
+                          } else {
+                            document.documentElement.classList.remove("dark");
+                            localStorage.setItem("theme", "light");
+                          }
+                        }}
+                      />
+                      <span className={styles.switchSlider} />
+                    </label>
+                  </div>
+
+                  <div className={styles.settingsRow}>
+                    <div className={styles.settingsRowLeft}>
+                      <span className={styles.settingsRowTitle}>Auto-Accept Transfers</span>
+                      <span className={styles.settingsRowDesc}>Automatically accept files from trusted devices</span>
+                    </div>
+                    <label className={styles.switchContainer}>
+                      <input 
+                        type="checkbox" 
+                        className={styles.switchInput}
+                        checked={settingsAutoAccept}
+                        onChange={(e) => setSettingsAutoAccept(e.target.checked)}
+                      />
+                      <span className={styles.switchSlider} />
+                    </label>
+                  </div>
+
+                  <div className={styles.settingsRow}>
+                    <div className={styles.settingsRowLeft}>
+                      <span className={styles.settingsRowTitle}>Notification Sounds</span>
+                      <span className={styles.settingsRowDesc}>Play chime on transfer completion</span>
+                    </div>
+                    <label className={styles.switchContainer}>
+                      <input 
+                        type="checkbox" 
+                        className={styles.switchInput}
+                        checked={settingsPlaySound}
+                        onChange={(e) => setSettingsPlaySound(e.target.checked)}
+                      />
+                      <span className={styles.switchSlider} />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {settingsSubCategory === "Network" && (
+              <div className={styles.settingsGroup} style={{ animation: "fade-in 0.3s ease-out" }}>
+                <span className={styles.settingsGroupTitle}>Network & Security</span>
+                <div className={styles.settingsCard}>
+                  <div className={styles.settingsFormGroup}>
+                    <label className={styles.settingsLabel}>Discovery Visibility</label>
+                    <select 
+                      className={styles.settingsSelect}
+                      value={settingsVisibility}
+                      onChange={(e) => setSettingsVisibility(e.target.value)}
+                    >
+                      <option value="everyone">Visible to Everyone</option>
+                      <option value="contacts">Visible to Contacts Only</option>
+                      <option value="hidden">Hidden (Invisible)</option>
+                    </select>
+                  </div>
+
+                  <div className={styles.settingsFormGroup}>
+                    <label className={styles.settingsLabel}>Preferred Listening Port</label>
+                    <input 
+                      type="text" 
+                      className={styles.settingsInput}
+                      value={settingsPort}
+                      onChange={(e) => setSettingsPort(e.target.value)}
+                      placeholder="e.g. 8000"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {settingsSubCategory === "Storage" && (
+              <div className={styles.settingsGroup} style={{ animation: "fade-in 0.3s ease-out" }}>
+                <span className={styles.settingsGroupTitle}>Storage Settings</span>
+                <div className={styles.settingsCard}>
+                  <div className={styles.settingsFormGroup}>
+                    <label className={styles.settingsLabel}>Download Path</label>
+                    <input 
+                      type="text" 
+                      className={styles.settingsInput}
+                      value={settingsDownloadPath}
+                      onChange={(e) => setSettingsDownloadPath(e.target.value)}
+                      placeholder="C:\Downloads\FileShare"
+                    />
+                  </div>
+
+                  <div className={styles.settingsRow}>
+                    <div className={styles.settingsRowLeft}>
+                      <span className={styles.settingsRowTitle}>Auto-clear Logs</span>
+                      <span className={styles.settingsRowDesc}>Remove transfer history logs older than 30 days</span>
+                    </div>
+                    <label className={styles.switchContainer}>
+                      <input 
+                        type="checkbox" 
+                        className={styles.switchInput}
+                        checked={settingsClearLogs}
+                        onChange={(e) => setSettingsClearLogs(e.target.checked)}
+                      />
+                      <span className={styles.switchSlider} />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {settingsSubCategory === "About" && (
+              <div className={styles.settingsGroup} style={{ animation: "fade-in 0.3s ease-out" }}>
+                <span className={styles.settingsGroupTitle}>About</span>
+                <div className={styles.settingsCard}>
+                  <div className={styles.settingsRow}>
+                    <div className={styles.settingsRowLeft}>
+                      <span className={styles.settingsRowTitle}>FileShare App</span>
+                      <span className={styles.settingsRowDesc}>Version 1.0.0 (GPL v3 Copyleft Protection)</span>
+                    </div>
+                    <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600 }}>Active</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Active view router dispatcher
   const renderActiveScreen = () => {
     switch (activePage) {
@@ -2538,12 +2955,12 @@ export default function Home() {
         return renderChats();
       case "My Files":
         return renderMyFiles();
-      case "Received":
-        return renderReceived();
       case "Transfers":
         return renderTransfers();
       case "Devices":
         return renderDevices();
+      case "Settings":
+        return renderSettings();
       default:
         return renderPlaceholderScreen(activePage);
     }
@@ -2571,11 +2988,58 @@ export default function Home() {
             setIsEditModalOpen(true);
           }}
           onToggleSidebar={() => setIsSidebarOpen(true)}
+          darkMode={settingsDarkMode}
+          onToggleDarkMode={() => {
+            const next = !settingsDarkMode;
+            setSettingsDarkMode(next);
+            if (next) {
+              document.documentElement.classList.add("dark");
+              localStorage.setItem("theme", "dark");
+            } else {
+              document.documentElement.classList.remove("dark");
+              localStorage.setItem("theme", "light");
+            }
+          }}
         />
         <div className={styles.contentWrapper}>
+          {/* Mobile Category Quick-Access Pills (Matches ui 8.png) */}
+          <div className={styles.categoryRow}>
+            {[
+              { id: "Dashboard", label: "Dashboard", icon: LayoutDashboard },
+              { id: "Chats", label: "Chats", icon: MessageSquare },
+              { id: "My Files", label: "My Files", icon: FolderOpen },
+              { id: "Favorites", label: "Favorites", icon: Star },
+              { id: "Transfers", label: "Transfers", icon: ArrowLeftRight },
+              { id: "Devices", label: "Devices", icon: Monitor },
+            ].map(cat => {
+              const Icon = cat.icon;
+              const isActive = activePage === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setActivePage(cat.id)}
+                  className={`${styles.categoryBtn} ${isActive ? styles.activeCategory : ""}`}
+                >
+                  <div className={styles.categoryIconWrapper}>
+                    <Icon size={20} />
+                  </div>
+                  <span className={styles.categoryLabel}>{cat.label}</span>
+                </button>
+              );
+            })}
+          </div>
           {renderActiveScreen()}
         </div>
       </main>
+
+      <BottomNav 
+        activePage={activePage} 
+        onPageChange={setActivePage} 
+        onPlusClick={() => {
+          handleRefreshDevices();
+          setIsScanning(true);
+        }} 
+      />
 
       {/* Profile & Device Edit Modal */}
       {isEditModalOpen && (

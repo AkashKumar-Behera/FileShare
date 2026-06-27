@@ -21,6 +21,13 @@ class Message(models.Model):
     is_read = models.BooleanField(default=False)
     is_edited = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
+
+    # File attachment support
+    file = models.FileField(upload_to='chat_attachments/', null=True, blank=True)
+    file_name = models.CharField(max_length=255, null=True, blank=True)
+    file_size = models.BigIntegerField(null=True, blank=True)
+    file_type = models.CharField(max_length=100, null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

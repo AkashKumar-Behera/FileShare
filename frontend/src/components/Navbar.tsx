@@ -9,26 +9,11 @@ interface NavbarProps {
   deviceName: string;
   onEditProfile: () => void;
   onToggleSidebar: () => void;
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
 }
 
-export default function Navbar({ username, deviceName, onEditProfile, onToggleSidebar }: NavbarProps) {
-  const [darkMode, setDarkMode] = useState(false);
-
-  useEffect(() => {
-    // Check if user has dark mode set or system preference
-    const isDark = document.documentElement.classList.contains("dark");
-    setDarkMode(isDark);
-  }, []);
-
-  const toggleDarkMode = () => {
-    const nextDark = !darkMode;
-    setDarkMode(nextDark);
-    if (nextDark) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  };
+export default function Navbar({ username, deviceName, onEditProfile, onToggleSidebar, darkMode, onToggleDarkMode }: NavbarProps) {
 
   return (
     <header className={styles.navbar}>
@@ -56,7 +41,7 @@ export default function Navbar({ username, deviceName, onEditProfile, onToggleSi
       <div className={styles.rightSection}>
         {/* Theme Toggle Button */}
         <button
-          onClick={toggleDarkMode}
+          onClick={onToggleDarkMode}
           className={styles.themeToggle}
           title="Toggle Dark Mode"
           aria-label="Toggle Dark Mode"

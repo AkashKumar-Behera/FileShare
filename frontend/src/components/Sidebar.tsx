@@ -24,10 +24,8 @@ const menuItems: MenuItem[] = [
   { name: "Dashboard", icon: LayoutDashboard },
   { name: "Chats", icon: MessageSquare },
   { name: "My Files", icon: Folder },
-  { name: "Received", icon: Download },
-  { name: "Sent", icon: Upload },
   { name: "Transfers", icon: ArrowLeftRight },
-  { name: "Tavorfers", icon: Star },
+  { name: "Favorites", icon: Star },
   { name: "Devices", icon: Laptop },
   { name: "Settings", icon: Settings },
 ];

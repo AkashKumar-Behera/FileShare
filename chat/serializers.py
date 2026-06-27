@@ -9,7 +9,7 @@ class MessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Message
-        fields = ['id', 'chat', 'sender_device_id', 'sender_name', 'sender_avatar', 'text', 'emoji', 'reply_to', 'is_read', 'created_at']
+        fields = ['id', 'chat', 'sender_device_id', 'sender_name', 'sender_avatar', 'text', 'emoji', 'reply_to', 'is_read', 'file', 'file_name', 'file_size', 'file_type', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 class ChatSerializer(serializers.ModelSerializer):
