@@ -2175,20 +2175,12 @@ export default function Home() {
             <Plus size={16} />
             <span>Start New Chat</span>
           </button>
-        </div>
-
-        {/* Right Chat Panel */}
-        <div className={`${styles.chatPanel} ${!hasActiveChat ? styles.chatPanelHiddenMobile : ""}`} style={{ position: "relative" }}>
-          <StarParticlesCanvas 
-            enabled={settingsStarEnabled} 
-            intensity={settingsStarIntensity} 
-            speed={settingsStarSpeed} 
-            isDark={settingsDarkMode} 
-          />
+         {/* Right Chat Panel */}
+        <div className={`${styles.chatPanel} ${!hasActiveChat ? styles.chatPanelHiddenMobile : ""}`}>
           {hasActiveChat ? (
             <>
               {/* Header */}
-              <div className={styles.chatPanelHeader} style={{ position: "relative", zIndex: 1 }}>
+              <div className={styles.chatPanelHeader}>
                 <div className={styles.chatPanelHeaderLeft}>
                   {/* Mobile Back Button */}
                   <button 
@@ -2221,51 +2213,98 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Chat Messages Body */}
-          <div className={styles.chatPanelBody} style={{ position: "relative", zIndex: 1 }}>
-            <span className={styles.chatDaySeparator} style={{ zIndex: 1, position: "relative" }}>Today</span>
+          {/* Chat Messages Body Container with Fixed Background Stars */}
+          <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            <StarParticlesCanvas 
+              enabled={settingsStarEnabled} 
+              intensity={settingsStarIntensity} 
+              speed={settingsStarSpeed} 
+              isDark={settingsDarkMode} 
+            />
+            
+            <div className={styles.chatPanelBody} style={{ flex: 1, overflowY: "auto", position: "relative", zIndex: 1 }}>
+              <span className={styles.chatDaySeparator}>Today</span>
 
-
-            {activeMessages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`${styles.chatBubble} ${
-                  msg.sender === "you" ? styles.chatBubbleOutgoing : styles.chatBubbleIncoming
-                }`}
-                style={{ zIndex: 1, position: "relative" }}
-              >
-                {msg.text && <span>{msg.text}</span>}
-                
-                {/* Real File Attachment Card */}
-                {msg.file && (
-                  (() => {
-                    const isImg = msg.file_type?.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(msg.file_name || "");
-                    const isVideo = msg.file_type?.startsWith("video/") || /\.(mp4|mov|m4v|avi|mkv|webm)$/i.test(msg.file_name || "");
-                    const isAudio = msg.file_type?.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|aac)$/i.test(msg.file_name || "");
-                    const fileUrl = msg.file.startsWith("http") ? msg.file : `http://${window.location.hostname}:8000${msg.file}`;
+              {activeMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`${styles.chatBubble} ${
+                    msg.sender === "you" ? styles.chatBubbleOutgoing : styles.chatBubbleIncoming
+                  }`}
+                  style={{ position: "relative", group: "true" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                    {msg.text && <span style={{ flex: 1 }}>{msg.text}</span>}
                     
-                    if (isImg) {
-                      return (
-                        <div style={{ marginTop: "8px", maxWidth: "320px", borderRadius: "8px", overflow: "hidden" }}>
-                          <img 
-                            src={fileUrl} 
-                            alt={msg.file_name} 
-                            style={{ width: "100%", height: "auto", maxHeight: "240px", objectFit: "cover", cursor: "pointer" }}
-                            onClick={() => {
-                              setLightboxData({
-                                url: fileUrl,
-                                fileName: msg.file_name || "attachment.png",
-                                messageId: msg.id,
-                                chatName: activeChat
-                              });
-                              setLightboxFilter("none");
-                              setLightboxRotation(0);
-                            }}
-                          />
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", backgroundColor: "rgba(0,0,0,0.05)" }}>
-                            <span style={{ fontSize: "11px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>{msg.file_name}</span>
-                            <button 
-                              type="button"
+                    {/* Action Bar for Message Bubbles */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", opacity: 0.8, marginLeft: "auto", paddingLeft: "8px" }}>
+                      {msg.sender === "you" && msg.text && (
+                        <button
+                          type="button"
+                          title="Edit message"
+                          onClick={() => {
+                            const newText = prompt("Edit your message:", msg.text);
+                            if (newText !== null && newText.trim() !== "") {
+                              setChatMessages((prev) => ({
+                                ...prev,
+                                [activeChat]: (prev[activeChat] || []).map((m) => m.id === msg.id ? { ...m, text: newText } : m)
+                              }));
+                              toast.success("Message edited");
+                            }
+                          }}
+                          style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7, padding: 0 }}
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        title="Forward message"
+                        onClick={() => {
+                          setLightboxData({
+                            url: msg.file || "",
+                            fileName: msg.file_name || "message text",
+                            messageId: msg.id,
+                            chatName: activeChat
+                          });
+                          setIsShareModalOpen(true);
+                        }}
+                        style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7, padding: 0 }}
+                      >
+                        <Share2 size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete message"
+                        onClick={() => {
+                          setChatMessages((prev) => ({
+                            ...prev,
+                            [activeChat]: (prev[activeChat] || []).filter((m) => m.id !== msg.id)
+                          }));
+                          toast.success("Message deleted");
+                        }}
+                        style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7, padding: 0 }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Real File Attachment Card */}
+                  {msg.file && (
+                    (() => {
+                      const isImg = msg.file_type?.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(msg.file_name || "");
+                      const isVideo = msg.file_type?.startsWith("video/") || /\.(mp4|mov|m4v|avi|mkv|webm)$/i.test(msg.file_name || "");
+                      const isAudio = msg.file_type?.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|aac)$/i.test(msg.file_name || "");
+                      const fileUrl = msg.file.startsWith("http") ? msg.file : `http://${window.location.hostname}:8000${msg.file}`;
+                      
+                      if (isImg) {
+                        return (
+                          <div style={{ marginTop: "8px", maxWidth: "320px", borderRadius: "8px", overflow: "hidden" }}>
+                            <img 
+                              src={fileUrl} 
+                              alt={msg.file_name} 
+                              style={{ width: "100%", height: "auto", maxHeight: "240px", objectFit: "cover", cursor: "pointer" }}
                               onClick={() => {
                                 setLightboxData({
                                   url: fileUrl,
@@ -2275,74 +2314,92 @@ export default function Home() {
                                 });
                                 setLightboxFilter("none");
                                 setLightboxRotation(0);
-                              }} 
-                              className={styles.downloadBtn} 
-                              style={{ fontSize: "11px", padding: "2px 6px", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
-                            >
-                              <Eye size={12} /> View
-                            </button>
+                              }}
+                            />
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", backgroundColor: "rgba(0,0,0,0.05)" }}>
+                              <span style={{ fontSize: "11px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>{msg.file_name}</span>
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  setLightboxData({
+                                    url: fileUrl,
+                                    fileName: msg.file_name || "attachment.png",
+                                    messageId: msg.id,
+                                    chatName: activeChat
+                                  });
+                                  setLightboxFilter("none");
+                                  setLightboxRotation(0);
+                                }} 
+                                className={styles.downloadBtn} 
+                                style={{ fontSize: "11px", padding: "2px 6px", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                              >
+                                <Eye size={12} /> View
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      );
+                        );
 
-                    } else if (isVideo) {
-                      return (
-                        <div style={{ marginTop: "8px", maxWidth: "320px", borderRadius: "8px", overflow: "hidden" }}>
-                          <video 
-                            src={fileUrl} 
-                            controls 
-                            style={{ width: "100%", height: "auto", maxHeight: "240px" }}
-                          />
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", backgroundColor: "rgba(0,0,0,0.05)" }}>
-                            <span style={{ fontSize: "11px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>{msg.file_name}</span>
-                            <a href={fileUrl} download={msg.file_name} className={styles.downloadBtn} style={{ fontSize: "11px", padding: "2px 6px", textDecoration: "none" }}>
-                              <ArrowDown size={12} /> Download
+                      } else if (isVideo) {
+                        return (
+                          <div style={{ marginTop: "8px", maxWidth: "320px", borderRadius: "8px", overflow: "hidden" }}>
+                            <video 
+                              src={fileUrl} 
+                              controls 
+                              style={{ width: "100%", height: "auto", maxHeight: "240px" }}
+                            />
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", backgroundColor: "rgba(0,0,0,0.05)" }}>
+                              <span style={{ fontSize: "11px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>{msg.file_name}</span>
+                              <a href={fileUrl} download={msg.file_name} className={styles.downloadBtn} style={{ fontSize: "11px", padding: "2px 6px", textDecoration: "none" }}>
+                                <ArrowDown size={12} /> Download
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      } else if (isAudio) {
+                        return (
+                          <div style={{ marginTop: "8px", maxWidth: "280px" }}>
+                            <audio src={fileUrl} controls style={{ width: "100%" }} />
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px" }}>
+                              <span style={{ fontSize: "10px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{msg.file_name}</span>
+                            </div>
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div className={styles.fileAttachmentCard}>
+                            <div className={styles.fileIconContainer}>
+                              <FolderArchive size={20} />
+                            </div>
+                            <div className={styles.fileDetails}>
+                              <span className={styles.fileName}>{msg.file_name}</span>
+                              <span className={styles.fileSize}>{formatBytes(msg.file_size || 0)}</span>
+                            </div>
+                            <a 
+                              href={fileUrl} 
+                              download={msg.file_name} 
+                              className={styles.downloadBtn}
+                              style={{ display: "flex", alignItems: "center", textDecoration: "none" }}
+                            >
+                              <ArrowDown size={14} />
+                              <span style={{ marginLeft: "4px" }}>Download</span>
                             </a>
                           </div>
-                        </div>
-                      );
-                    } else if (isAudio) {
-                      return (
-                        <div style={{ marginTop: "8px", maxWidth: "280px" }}>
-                          <audio src={fileUrl} controls style={{ width: "100%" }} />
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px" }}>
-                            <span style={{ fontSize: "10px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{msg.file_name}</span>
-                          </div>
-                        </div>
-                      );
-                    } else {
-                      return (
-                        <div className={styles.fileAttachmentCard}>
-                          <div className={styles.fileIconContainer}>
-                            <FolderArchive size={20} />
-                          </div>
-                          <div className={styles.fileDetails}>
-                            <span className={styles.fileName}>{msg.file_name}</span>
-                            <span className={styles.fileSize}>{formatBytes(msg.file_size || 0)}</span>
-                          </div>
-                          <a 
-                            href={fileUrl} 
-                            download={msg.file_name} 
-                            className={styles.downloadBtn}
-                            style={{ display: "flex", alignItems: "center", textDecoration: "none" }}
-                          >
-                            <ArrowDown size={14} />
-                            <span style={{ marginLeft: "4px" }}>Download</span>
-                          </a>
-                        </div>
-                      );
-                    }
-                  })()
-                )}
-                
-                <span className={styles.chatBubbleTime}>
-                  {msg.time} {msg.sender === "you" && " ✓✓"}
-                </span>
-              </div>
-            ))}
-            {/* Scroll Anchor */}
-            <div ref={messagesEndRef} />
+                        );
+                      }
+                    })()
+                  )}
+                  
+                  <span className={styles.chatBubbleTime}>
+                    {msg.time} {msg.sender === "you" && " ✓✓"}
+                  </span>
+                </div>
+              ))}
+
+              {/* Scroll Anchor */}
+              <div ref={messagesEndRef} />
+            </div>
           </div>
+
 
           {/* Footer Input & Action Panel */}
           <div className={styles.chatPanelFooter}>
