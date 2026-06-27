@@ -2177,8 +2177,11 @@ export default function Home() {
             <Plus size={16} />
             <span>Start New Chat</span>
           </button>
-         {/* Right Chat Panel */}
+        </div>
+
+        {/* Right Chat Panel */}
         <div className={`${styles.chatPanel} ${!hasActiveChat ? styles.chatPanelHiddenMobile : ""}`}>
+
           {hasActiveChat ? (
             <>
               {/* Header */}
