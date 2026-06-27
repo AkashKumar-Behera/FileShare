@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import styles from "./Navbar.module.css";
-import { Search, Moon, Sun, ChevronDown, Menu } from "lucide-react";
+import { Search, ChevronDown, Menu } from "lucide-react";
+import { SkiperThemeToggleButton, useSkiperThemeToggle } from "./SkiperThemeToggle";
 
 interface NavbarProps {
   username: string;
@@ -11,9 +12,15 @@ interface NavbarProps {
   onToggleSidebar: () => void;
   darkMode: boolean;
   onToggleDarkMode: () => void;
+  isChatActive?: boolean;
 }
 
-export default function Navbar({ username, deviceName, onEditProfile, onToggleSidebar, darkMode, onToggleDarkMode }: NavbarProps) {
+export default function Navbar({ username, deviceName, onEditProfile, onToggleSidebar, darkMode, onToggleDarkMode, isChatActive }: NavbarProps) {
+  const { isDark, toggleTheme } = useSkiperThemeToggle((nextDark) => {
+    onToggleDarkMode();
+  });
+
+  if (isChatActive) return null;
 
   return (
     <header className={styles.navbar}>
@@ -39,15 +46,8 @@ export default function Navbar({ username, deviceName, onEditProfile, onToggleSi
 
       {/* Right Controls & Profile */}
       <div className={styles.rightSection}>
-        {/* Theme Toggle Button */}
-        <button
-          onClick={onToggleDarkMode}
-          className={styles.themeToggle}
-          title="Toggle Dark Mode"
-          aria-label="Toggle Dark Mode"
-        >
-          {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
+        {/* Skiper26 Animated Theme Toggle Button */}
+        <SkiperThemeToggleButton onClick={toggleTheme} isDark={darkMode} />
 
         {/* Profile Dropdown Widget */}
         <div className={styles.profileWrapper} onClick={onEditProfile} title="Edit Device/Username">

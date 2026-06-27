@@ -1,6 +1,7 @@
 .sidebar {
   width: 260px;
   height: 100vh;
+  height: 100dvh;
   position: fixed;
   top: 0;
   left: 0;
@@ -12,7 +13,8 @@
   justify-content: space-between;
   z-index: 100;
   user-select: none;
-  transition: transform var(--transition-speed) ease;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
 }
 
 .closeButton {
@@ -29,7 +31,7 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  transition: all var(--transition-speed) ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 110;
 }
 
@@ -45,11 +47,13 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(2px);
+  height: 100dvh;
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 95;
   opacity: 0;
-  transition: opacity var(--transition-speed) ease;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: none;
 }
 
@@ -58,6 +62,7 @@
   opacity: 1;
   pointer-events: auto;
 }
+
 
 @media (max-width: 1024px) {
   .sidebar {

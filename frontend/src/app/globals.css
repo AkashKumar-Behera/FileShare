@@ -63,7 +63,8 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s cubic-bezier(0.4, 0, 0.2, 1), color 0.35s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), color 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
@@ -71,10 +72,13 @@ html, body {
   color: var(--text-primary);
   font-family: var(--font-family-inter);
   font-size: 14px;
-  height: 100%;
-  overflow-x: hidden;
+  min-height: 100%;
+  max-width: 100vw;
+  overflow-x: hidden !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-touch-callout: none;
+  scroll-behavior: smooth;
   transition: background-color var(--transition-speed), color var(--transition-speed);
 }
 
@@ -89,6 +93,14 @@ button {
   font-family: inherit;
   cursor: pointer;
   outline: none;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+button:active {
+  transform: scale(0.97);
+  transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 input {
@@ -115,12 +127,30 @@ input {
   background: var(--text-muted);
 }
 
-/* Animation utilities */
+/* Animation & Native Hardware Acceleration utilities */
+.gpu-layer {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.3s ease forwards;
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Hide Next.js Development Overlay Badges & Icons */
+nextjs-portal,
+[data-nextjs-toast],
+[class*="nextjs-toast"],
+[class*="next-dev-overlay"],
+#data-next-badge {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+

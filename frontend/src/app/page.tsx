@@ -1,6 +1,10 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { motionTokens } from "../lib/motionTokens";
 import styles from "./page.module.css";
 import Sidebar from "../components/Sidebar";
 import BottomNav from "../components/BottomNav";
@@ -42,7 +46,9 @@ import {
   LayoutDashboard,
   ArrowLeftRight,
   Star,
-  ArrowLeft
+  ArrowLeft,
+  Paperclip,
+  Music
 } from "lucide-react";
 
 // Interfaces for UI Data
@@ -190,9 +196,19 @@ export default function Home() {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isTypingLocal, setIsTypingLocal] = useState(false);
 
-  // Message scroll anchor ref
+  // AutoAnimate hooks for list transitions
+  const [parentDevicesList] = useAutoAnimate();
+  const [parentTransfersList] = useAutoAnimate();
+  const [parentMessagesList] = useAutoAnimate();
+
+  // Attach Menu & File Type Refs
+  const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const imageInputRef = React.useRef<HTMLInputElement | null>(null);
+  const audioInputRef = React.useRef<HTMLInputElement | null>(null);
+  const videoInputRef = React.useRef<HTMLInputElement | null>(null);
+  const docInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -201,6 +217,26 @@ export default function Home() {
   React.useEffect(() => {
     scrollToBottom();
   }, [chatMessages, activeChat]);
+
+  // Handle Hardware / Browser Back Button properly
+  React.useEffect(() => {
+    const handlePopState = () => {
+      if (isAttachMenuOpen) {
+        setIsAttachMenuOpen(false);
+      } else if (activeChat !== "") {
+        setActiveChat("");
+      }
+    };
+
+    if (activeChat !== "" || isAttachMenuOpen) {
+      window.history.pushState({ inChat: true }, "");
+      window.addEventListener("popstate", handlePopState);
+    }
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [activeChat, isAttachMenuOpen]);
 
   const [nearbyDevices, setNearbyDevices] = useState<{ name: string; ip: string; status: string }[]>([]);
   const [recentChats, setRecentChats] = useState<{ name: string; time: string; lastMsg?: string }[]>([]);
@@ -290,9 +326,6 @@ export default function Home() {
         });
         
         setNearbyDevices(mapped);
-        if (mapped.length > 0 && (!activeChat || activeChat === "Artemis-PC")) {
-          setActiveChat(mapped[0].name);
-        }
         loadRecentChats(targetId);
         setTimeout(() => setIsScanning(false), 800); // Small animation buffer
       })
@@ -776,6 +809,7 @@ export default function Home() {
           })
           .then(msgs => {
             console.log("Uploaded successfully:", msgs);
+            toast.success(`${files.length} file(s) attached successfully!`);
             // Refresh messages list
             fetch(getApiUrl(`/chats/${activeChatId}/messages`))
               .then(r => r.json())
@@ -1082,7 +1116,7 @@ export default function Home() {
 
         {/* Stats Grid Widget */}
         <div className={styles.dashboardSection}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "24px" }}>
+          <div className={styles.dashboardStatsGrid}>
             {/* Total Files Card */}
             <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "20px 24px", cursor: "default" }}>
               <div className={styles.actionIconWrapper} style={{ width: "48px", height: "48px", borderRadius: "12px" }}>
@@ -2185,21 +2219,104 @@ export default function Home() {
                 </span>
               </div>
             )}
-            <div className={styles.chatInputWrapper}>
-              <input
-                type="file"
-                multiple
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                style={{ display: "none" }}
-              />
+            <div className={styles.chatInputWrapper} style={{ position: "relative" }}>
+              {/* WhatsApp Style Attachment Popup Modal */}
+              <AnimatePresence>
+                {isAttachMenuOpen && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
+                    style={{
+                      position: "absolute",
+                      bottom: "54px",
+                      left: "0",
+                      backgroundColor: "var(--bg-card)",
+                      border: "1px solid var(--border-color)",
+                      borderRadius: "16px",
+                      padding: "16px",
+                      boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, 1fr)",
+                      gap: "16px",
+                      zIndex: 100,
+                      minWidth: "240px"
+                    }}
+                  >
+                    <button 
+                      type="button"
+                      onClick={() => { setIsAttachMenuOpen(false); docInputRef.current?.click(); }}
+                      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", cursor: "pointer" }}
+                    >
+                      <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#7F66FF", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <FileText size={20} />
+                      </div>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)" }}>Document</span>
+                    </button>
+
+                    <button 
+                      type="button"
+                      onClick={() => { setIsAttachMenuOpen(false); imageInputRef.current?.click(); }}
+                      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", cursor: "pointer" }}
+                    >
+                      <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#EC407A", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <ImageIcon size={20} />
+                      </div>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)" }}>Photos</span>
+                    </button>
+
+                    <button 
+                      type="button"
+                      onClick={() => { setIsAttachMenuOpen(false); videoInputRef.current?.click(); }}
+                      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", cursor: "pointer" }}
+                    >
+                      <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#FF7043", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Play size={20} />
+                      </div>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)" }}>Videos</span>
+                    </button>
+
+                    <button 
+                      type="button"
+                      onClick={() => { setIsAttachMenuOpen(false); audioInputRef.current?.click(); }}
+                      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", cursor: "pointer" }}
+                    >
+                      <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#9C27B0", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Music size={20} />
+                      </div>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)" }}>Audio</span>
+                    </button>
+
+                    <button 
+                      type="button"
+                      onClick={() => { setIsAttachMenuOpen(false); fileInputRef.current?.click(); }}
+                      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", cursor: "pointer" }}
+                    >
+                      <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#00BCD4", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <FolderArchive size={20} />
+                      </div>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)" }}>All Files</span>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Hidden Inputs for File Types */}
+              <input type="file" multiple ref={fileInputRef} onChange={handleFileUpload} style={{ display: "none" }} />
+              <input type="file" multiple accept="image/*" ref={imageInputRef} onChange={handleFileUpload} style={{ display: "none" }} />
+              <input type="file" multiple accept="audio/*" ref={audioInputRef} onChange={handleFileUpload} style={{ display: "none" }} />
+              <input type="file" multiple accept="video/*" ref={videoInputRef} onChange={handleFileUpload} style={{ display: "none" }} />
+              <input type="file" multiple accept=".pdf,.doc,.docx,.txt,.ppt,.pptx,.xls,.xlsx" ref={docInputRef} onChange={handleFileUpload} style={{ display: "none" }} />
+
               <button 
                 type="button" 
                 className={styles.chatInputIcon} 
-                onClick={() => fileInputRef.current?.click()} 
+                onClick={() => setIsAttachMenuOpen(prev => !prev)} 
                 title="Attach Files"
+                style={{ color: isAttachMenuOpen ? "var(--primary)" : "var(--text-secondary)", transform: "rotate(-45deg)" }}
               >
-                <Plus size={20} />
+                <Paperclip size={20} />
               </button>
               <input
                 type="text"
@@ -2980,6 +3097,7 @@ export default function Home() {
       {/* Main Container Layout */}
       <main className={styles.mainContent}>
         <Navbar
+          isChatActive={activePage === "Chats" && activeChat !== ""}
           username={username}
           deviceName={deviceName}
           onEditProfile={() => {
@@ -3002,44 +3120,48 @@ export default function Home() {
           }}
         />
         <div className={styles.contentWrapper}>
-          {/* Mobile Category Quick-Access Pills (Matches ui 8.png) */}
-          <div className={styles.categoryRow}>
-            {[
-              { id: "Dashboard", label: "Dashboard", icon: LayoutDashboard },
-              { id: "Chats", label: "Chats", icon: MessageSquare },
-              { id: "My Files", label: "My Files", icon: FolderOpen },
-              { id: "Favorites", label: "Favorites", icon: Star },
-              { id: "Transfers", label: "Transfers", icon: ArrowLeftRight },
-              { id: "Devices", label: "Devices", icon: Monitor },
-            ].map(cat => {
-              const Icon = cat.icon;
-              const isActive = activePage === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setActivePage(cat.id)}
-                  className={`${styles.categoryBtn} ${isActive ? styles.activeCategory : ""}`}
-                >
-                  <div className={styles.categoryIconWrapper}>
-                    <Icon size={20} />
-                  </div>
-                  <span className={styles.categoryLabel}>{cat.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          {/* Mobile Category Quick-Access Pills (Only on Dashboard for quick jump) */}
+          {activePage === "Dashboard" && (
+            <div className={styles.categoryRow}>
+              {[
+                { id: "Dashboard", label: "Dashboard", icon: LayoutDashboard },
+                { id: "Chats", label: "Chats", icon: MessageSquare },
+                { id: "My Files", label: "My Files", icon: FolderOpen },
+                { id: "Favorites", label: "Favorites", icon: Star },
+                { id: "Transfers", label: "Transfers", icon: ArrowLeftRight },
+                { id: "Devices", label: "Devices", icon: Monitor },
+              ].map(cat => {
+                const Icon = cat.icon;
+                const isActive = activePage === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActivePage(cat.id)}
+                    className={`${styles.categoryBtn} ${isActive ? styles.activeCategory : ""}`}
+                  >
+                    <div className={styles.categoryIconWrapper}>
+                      <Icon size={20} />
+                    </div>
+                    <span className={styles.categoryLabel}>{cat.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {renderActiveScreen()}
         </div>
       </main>
 
-      <BottomNav 
-        activePage={activePage} 
-        onPageChange={setActivePage} 
-        onPlusClick={() => {
-          handleRefreshDevices();
-          setIsScanning(true);
-        }} 
-      />
+      {!(activePage === "Chats" && activeChat !== "") && (
+        <BottomNav 
+          activePage={activePage} 
+          onPageChange={setActivePage} 
+          onPlusClick={() => {
+            handleRefreshDevices();
+            setIsScanning(true);
+          }} 
+        />
+      )}
 
       {/* Profile & Device Edit Modal */}
       {isEditModalOpen && (
