@@ -300,6 +300,72 @@ export default function Home() {
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
   const [messageInput, setMessageInput] = useState<string>("");
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>({});
+  const [deletedMessageIds, setDeletedMessageIds] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return JSON.parse(localStorage.getItem("deletedMessageIds") || "[]");
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const handleDeleteMessage = (msgId: string, chatName: string) => {
+    if (!msgId) return;
+    setDeletedMessageIds(prev => {
+      const next = [...prev, msgId];
+      if (typeof window !== "undefined") {
+        localStorage.setItem("deletedMessageIds", JSON.stringify(next));
+      }
+      return next;
+    });
+    setChatMessages((prev) => ({
+      ...prev,
+      [chatName]: (prev[chatName] || []).filter((m) => m.id !== msgId)
+    }));
+    fetch(getApiUrl("/chats/delete_message"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message_id: msgId })
+    }).catch(() => {});
+    toast.success("Message deleted");
+  };
+
+  const handleEditMessage = (msgId: string, newText: string, chatName: string) => {
+    if (!msgId || !newText.trim()) return;
+    setChatMessages((prev) => ({
+      ...prev,
+      [chatName]: (prev[chatName] || []).map((m) => m.id === msgId ? { ...m, text: newText } : m)
+    }));
+    fetch(getApiUrl("/chats/edit_message"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message_id: msgId, text: newText })
+    }).catch(() => {});
+    toast.success("Message edited");
+  };
+
+  // WhatsApp Context Menu & Replying States
+  const [contextMenuData, setContextMenuData] = useState<{ x: number; y: number; msg: ChatMessage; chatName: string } | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{ id: string; text?: string; file_name?: string; sender: string } | null>(null);
+  const [starredMessageIds, setStarredMessageIds] = useState<string[]>([]);
+  const touchTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const toggleStarMessage = (msgId: string) => {
+    setStarredMessageIds(prev => {
+      const isStarred = prev.includes(msgId);
+      if (isStarred) {
+        toast.info("Unstarred message");
+        return prev.filter(id => id !== msgId);
+      } else {
+        toast.success("Starred message added to Favorites");
+        return [...prev, msgId];
+      }
+    });
+  };
+
+
 
   // Typing effect states
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
@@ -615,17 +681,24 @@ export default function Home() {
             fetch(getApiUrl(`/chats/${chatObj.id}/messages`))
               .then(res => res.json())
               .then((msgData: any[]) => {
-                const formatted = msgData.map(m => ({
-                  id: String(m.id),
-                  sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
-                  text: m.text,
-                  time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                }));
+                const formatted = msgData
+                  .filter(m => !m.is_deleted && !deletedMessageIds.includes(String(m.id)))
+                  .map(m => ({
+                    id: String(m.id),
+                    sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
+                    text: m.text,
+                    time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    file: m.file,
+                    file_name: m.file_name,
+                    file_size: m.file_size,
+                    file_type: m.file_type
+                  }));
                 setChatMessages(prev => ({
                   ...prev,
                   [activeChat]: formatted
                 }));
               });
+
           });
         }
       })
@@ -742,16 +815,19 @@ export default function Home() {
       fetch(getApiUrl(`/chats/${activeChatId}/messages`))
         .then(res => res.json())
         .then((msgData: any[]) => {
-          const formatted = msgData.map(m => ({
-            id: String(m.id),
-            sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
-            text: m.text,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            file: m.file,
-            file_name: m.file_name,
-            file_size: m.file_size,
-            file_type: m.file_type
-          }));
+          const formatted = msgData
+            .filter(m => !m.is_deleted && !deletedMessageIds.includes(String(m.id)))
+            .map(m => ({
+              id: String(m.id),
+              sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
+              text: m.text,
+              time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              file: m.file,
+              file_name: m.file_name,
+              file_size: m.file_size,
+              file_type: m.file_type
+            }));
+
           setChatMessages(prev => ({
             ...prev,
             [activeChat]: formatted
@@ -2236,14 +2312,35 @@ export default function Home() {
                   className={`${styles.chatBubble} ${
                     msg.sender === "you" ? styles.chatBubbleOutgoing : styles.chatBubbleIncoming
                   }`}
-                  style={{ position: "relative" }}
+                  style={{ position: "relative", cursor: "context-menu" }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenuData({ x: e.clientX, y: e.clientY, msg, chatName: activeChat });
+                  }}
+                  onTouchStart={(e) => {
+                    const touch = e.touches[0];
+                    const x = touch.clientX;
+                    const y = touch.clientY;
+                    touchTimerRef.current = setTimeout(() => {
+                      setContextMenuData({ x, y, msg, chatName: activeChat });
+                    }, 500);
+                  }}
+                  onTouchEnd={() => {
+                    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+                  }}
+                  onTouchMove={() => {
+                    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+                  }}
                 >
-
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
                     {msg.text && <span style={{ flex: 1 }}>{msg.text}</span>}
                     
                     {/* Action Bar for Message Bubbles */}
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", opacity: 0.8, marginLeft: "auto", paddingLeft: "8px" }}>
+                      {starredMessageIds.includes(msg.id) && (
+                        <Star size={12} style={{ fill: "#F59E0B", color: "#F59E0B" }} />
+                      )}
+
                       {msg.sender === "you" && msg.text && (
                         <button
                           type="button"
@@ -2251,11 +2348,7 @@ export default function Home() {
                           onClick={() => {
                             const newText = prompt("Edit your message:", msg.text);
                             if (newText !== null && newText.trim() !== "") {
-                              setChatMessages((prev) => ({
-                                ...prev,
-                                [activeChat]: (prev[activeChat] || []).map((m) => m.id === msg.id ? { ...m, text: newText } : m)
-                              }));
-                              toast.success("Message edited");
+                              handleEditMessage(msg.id, newText, activeChat);
                             }
                           }}
                           style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7, padding: 0 }}
@@ -2263,6 +2356,7 @@ export default function Home() {
                           <Edit3 size={13} />
                         </button>
                       )}
+
                       <button
                         type="button"
                         title="Forward message"
@@ -2282,17 +2376,12 @@ export default function Home() {
                       <button
                         type="button"
                         title="Delete message"
-                        onClick={() => {
-                          setChatMessages((prev) => ({
-                            ...prev,
-                            [activeChat]: (prev[activeChat] || []).filter((m) => m.id !== msg.id)
-                          }));
-                          toast.success("Message deleted");
-                        }}
+                        onClick={() => handleDeleteMessage(msg.id, activeChat)}
                         style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7, padding: 0 }}
                       >
                         <Trash2 size={13} />
                       </button>
+
                     </div>
                   </div>
                   
@@ -2409,7 +2498,21 @@ export default function Home() {
 
           {/* Footer Input & Action Panel */}
           <div className={styles.chatPanelFooter}>
+            {replyingTo && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "rgba(108, 99, 255, 0.1)", borderLeft: "3px solid var(--primary)", borderRadius: "8px", marginBottom: "8px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--primary)" }}>Replying to {replyingTo.sender}</span>
+                  <span style={{ fontSize: "12px", color: "var(--text-secondary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "300px" }}>
+                    {replyingTo.text || replyingTo.file_name || "Attachment"}
+                  </span>
+                </div>
+                <button type="button" onClick={() => setReplyingTo(null)} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}>
+                  <X size={16} />
+                </button>
+              </div>
+            )}
             {typingUsers.length > 0 && (
+
               <div className={styles.chatTypingIndicator}>
                 <div className={styles.chatTypingDots}>
                   <span />
@@ -3565,17 +3668,13 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   if (lightboxData.messageId && lightboxData.chatName) {
-                    const targetChat = lightboxData.chatName;
-                    setChatMessages((prev) => ({
-                      ...prev,
-                      [targetChat]: (prev[targetChat] || []).filter((m) => m.id !== lightboxData.messageId)
-                    }));
-                    toast.success("Image deleted from chat");
+                    handleDeleteMessage(lightboxData.messageId, lightboxData.chatName);
                     setLightboxData(null);
                   }
                 }}
                 style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", color: "#EF4444", fontSize: "11px", background: "none", border: "none", cursor: "pointer" }}
               >
+
                 <Trash2 size={18} />
                 <span>Delete</span>
               </button>
@@ -3633,7 +3732,132 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* WhatsApp Style Context Menu Modal Overlay */}
+      {contextMenuData && (
+        <div 
+          style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", zIndex: 9999, backgroundColor: "rgba(0,0,0,0.3)" }} 
+          onClick={() => setContextMenuData(null)}
+          onContextMenu={(e) => { e.preventDefault(); setContextMenuData(null); }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            style={{
+              position: "fixed",
+              top: Math.min(contextMenuData.y, window.innerHeight - 260),
+              left: Math.min(contextMenuData.x, window.innerWidth - 200),
+              backgroundColor: "var(--bg-card)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "12px",
+              padding: "6px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+              minWidth: "180px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "2px"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setReplyingTo({
+                  id: contextMenuData.msg.id,
+                  text: contextMenuData.msg.text,
+                  file_name: contextMenuData.msg.file_name,
+                  sender: contextMenuData.msg.sender === "you" ? "You" : contextMenuData.chatName
+                });
+                setContextMenuData(null);
+              }}
+              style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "8px", border: "none", backgroundColor: "transparent", color: "var(--text-primary)", cursor: "pointer", fontSize: "13px" }}
+            >
+              <ArrowLeftRight size={16} color="var(--primary)" />
+              <span>Reply</span>
+            </button>
+
+            {contextMenuData.msg.sender === "you" && contextMenuData.msg.text && (
+              <button
+                type="button"
+                onClick={() => {
+                  const currentText = contextMenuData.msg.text || "";
+                  const newText = prompt("Edit your message:", currentText);
+                  if (newText !== null && newText.trim() !== "") {
+                    handleEditMessage(contextMenuData.msg.id, newText, contextMenuData.chatName);
+                  }
+                  setContextMenuData(null);
+                }}
+                style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "8px", border: "none", backgroundColor: "transparent", color: "var(--text-primary)", cursor: "pointer", fontSize: "13px" }}
+              >
+                <Edit3 size={16} color="#3B82F6" />
+                <span>Edit</span>
+              </button>
+            )}
+
+            {contextMenuData.msg.text && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (contextMenuData.msg.text) {
+                    navigator.clipboard.writeText(contextMenuData.msg.text);
+                    toast.success("Text copied to clipboard");
+                  }
+                  setContextMenuData(null);
+                }}
+                style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "8px", border: "none", backgroundColor: "transparent", color: "var(--text-primary)", cursor: "pointer", fontSize: "13px" }}
+              >
+                <FileText size={16} color="#10B981" />
+                <span>Copy Text</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                toggleStarMessage(contextMenuData.msg.id);
+                setContextMenuData(null);
+              }}
+              style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "8px", border: "none", backgroundColor: "transparent", color: "var(--text-primary)", cursor: "pointer", fontSize: "13px" }}
+            >
+              <Star size={16} color="#F59E0B" style={starredMessageIds.includes(contextMenuData.msg.id) ? { fill: "#F59E0B" } : {}} />
+              <span>{starredMessageIds.includes(contextMenuData.msg.id) ? "Unstar" : "Star"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setLightboxData({
+                  url: contextMenuData.msg.file || "",
+                  fileName: contextMenuData.msg.file_name || "message text",
+                  messageId: contextMenuData.msg.id,
+                  chatName: contextMenuData.chatName
+                });
+                setIsShareModalOpen(true);
+                setContextMenuData(null);
+              }}
+              style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "8px", border: "none", backgroundColor: "transparent", color: "var(--text-primary)", cursor: "pointer", fontSize: "13px" }}
+            >
+              <Share2 size={16} color="#8B5CF6" />
+              <span>Forward</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                handleDeleteMessage(contextMenuData.msg.id, contextMenuData.chatName);
+                setContextMenuData(null);
+              }}
+              style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "8px", border: "none", backgroundColor: "transparent", color: "#EF4444", cursor: "pointer", fontSize: "13px" }}
+            >
+              <Trash2 size={16} />
+              <span>Delete</span>
+            </button>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
+
 

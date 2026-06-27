@@ -32,9 +32,38 @@ class ChatViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def messages(self, request, pk=None):
         chat = self.get_object()
-        messages = chat.messages.order_by('created_at')
+        messages = chat.messages.filter(is_deleted=False).order_by('created_at')
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def delete_message(self, request):
+        message_id = request.data.get('message_id')
+        if not message_id:
+            return Response({"error": "message_id required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            msg = Message.objects.get(id=message_id)
+            msg.is_deleted = True
+            msg.save()
+            return Response({"status": "deleted"})
+        except Message.DoesNotExist:
+            return Response({"error": "Message not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['post'])
+    def edit_message(self, request):
+        message_id = request.data.get('message_id')
+        new_text = request.data.get('text', '')
+        if not message_id:
+            return Response({"error": "message_id required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            msg = Message.objects.get(id=message_id)
+            msg.text = new_text
+            msg.save()
+            return Response({"status": "edited", "text": new_text})
+        except Message.DoesNotExist:
+            return Response({"error": "Message not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
 
     @action(detail=False, methods=['post'])
     def get_or_create_direct(self, request):
