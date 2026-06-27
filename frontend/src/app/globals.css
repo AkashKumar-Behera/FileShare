@@ -1,0 +1,125 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg-app: #F8F9FD;
+  --bg-sidebar: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --border-color: #ECEFF6;
+  
+  --primary: #5E5CE6;
+  --primary-hover: #4C4ABF;
+  --primary-light: #F2F1FD;
+  --primary-muted: #8E8DF1;
+
+  --success: #10B981;
+  --success-light: #E7F9F3;
+  --success-hover: #0D9668;
+
+  --danger: #EF4444;
+  --danger-light: #FDE8E8;
+
+  --warning: #F59E0B;
+  --warning-light: #FEF3C7;
+
+  --info: #3B82F6;
+  --info-light: #EFF6FF;
+
+  --text-primary: #1A1C23;
+  --text-secondary: #687182;
+  --text-muted: #9AA1B0;
+  
+  --font-family-outfit: 'Outfit', 'Inter', -apple-system, sans-serif;
+  --font-family-inter: 'Inter', -apple-system, sans-serif;
+
+  --transition-speed: 0.2s;
+  --border-radius-sm: 8px;
+  --border-radius-md: 12px;
+  --border-radius-lg: 16px;
+  --box-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --box-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+/* Dark mode basic structure - since toggle is visible we can support class-based dark mode */
+.dark {
+  --bg-app: #0B0C10;
+  --bg-sidebar: #111217;
+  --bg-card: #181920;
+  --border-color: #242631;
+  
+  --primary: #7A79F5;
+  --primary-hover: #6362D9;
+  --primary-light: #1D1E2C;
+  --primary-muted: #A1A0F8;
+
+  --text-primary: #ECEFF4;
+  --text-secondary: #A0A5B5;
+  --text-muted: #727786;
+  
+  --success-light: #122F26;
+  --danger-light: #3A1B1B;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-family-inter);
+  font-size: 14px;
+  height: 100%;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--transition-speed), color var(--transition-speed);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  background: none;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
+input {
+  font-family: inherit;
+  outline: none;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}

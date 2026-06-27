@@ -1,0 +1,124 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  width: 100%;
+  margin-bottom: 32px;
+}
+
+@media (max-width: 1200px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: 20px 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  box-shadow: var(--box-shadow-sm);
+  transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--box-shadow-md);
+  border-color: rgba(94, 92, 230, 0.2);
+}
+
+.iconWrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--border-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Color theme overrides for icons */
+.totalIcon {
+  background-color: var(--primary-light);
+  color: var(--primary);
+}
+
+.completedIcon {
+  background-color: rgba(59, 130, 246, 0.08);
+  color: var(--info);
+}
+
+.inProgressIcon {
+  background-color: rgba(94, 92, 230, 0.08);
+  color: var(--primary-muted);
+}
+
+.failedIcon {
+  background-color: var(--danger-light);
+  color: var(--danger);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.value {
+  font-family: var(--font-family-outfit);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.subtext {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.trendUp {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.trendLink {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.trendLink:hover {
+  text-decoration: underline;
+}
+
+.failedLink {
+  color: var(--danger);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.failedLink:hover {
+  text-decoration: underline;
+}

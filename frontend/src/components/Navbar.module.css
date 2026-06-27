@@ -1,0 +1,141 @@
+.navbar {
+  height: 72px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 40px;
+  background-color: transparent;
+  border-bottom: 1px solid transparent; /* Keeps layout clean */
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  user-select: none;
+}
+
+.searchWrapper {
+  position: relative;
+  width: 440px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  height: 42px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 21px; /* Pill shape */
+  padding: 0 16px 0 48px;
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: all var(--transition-speed) ease;
+}
+
+.searchInput::placeholder {
+  color: var(--text-muted);
+}
+
+.searchInput:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(94, 92, 230, 0.08);
+}
+
+.rightSection {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.themeToggle {
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  transition: background-color var(--transition-speed) ease;
+}
+
+.themeToggle:hover {
+  background-color: var(--primary-light);
+  color: var(--primary);
+}
+
+.profileWrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--border-radius-sm);
+  transition: background-color var(--transition-speed) ease;
+}
+
+.profileWrapper:hover {
+  background-color: var(--primary-light);
+}
+
+.avatarContainer {
+  position: relative;
+  width: 36px;
+  height: 36px;
+}
+
+.avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-color: #4C4ABF;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  border: 2px solid var(--bg-app);
+  box-shadow: var(--box-shadow-sm);
+}
+
+.onlineStatus {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background-color: var(--success);
+  border: 2px solid var(--bg-sidebar);
+  border-radius: 50%;
+}
+
+.profileInfo {
+  display: flex;
+  flex-direction: column;
+}
+
+.profileName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.profileDevice {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.chevron {
+  color: var(--text-secondary);
+  width: 16px;
+  height: 16px;
+}
