@@ -20,10 +20,9 @@ export default function Navbar({ username, deviceName, onEditProfile, onToggleSi
     onToggleDarkMode();
   });
 
-  if (isChatActive) return null;
-
   return (
-    <header className={styles.navbar}>
+    <header className={`${styles.navbar} ${isChatActive ? styles.mobileChatActiveHidden : ""}`}>
+
       {/* Mobile Sidebar Hamburger Toggle */}
       <button
         onClick={onToggleSidebar}
