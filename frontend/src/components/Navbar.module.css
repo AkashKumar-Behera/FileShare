@@ -139,3 +139,48 @@
   width: 16px;
   height: 16px;
 }
+
+.menuToggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--border-radius-sm);
+  transition: background-color var(--transition-speed) ease;
+}
+
+.menuToggle:hover {
+  background-color: var(--primary-light);
+  color: var(--primary);
+}
+
+@media (max-width: 1024px) {
+  .navbar {
+    padding: 0 20px;
+  }
+  .menuToggle {
+    display: flex;
+  }
+  .searchWrapper {
+    width: auto;
+    flex: 1;
+    margin: 0 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .navbar {
+    padding: 0 12px;
+  }
+  .profileInfo {
+    display: none;
+  }
+  .searchWrapper {
+    margin: 0 8px;
+  }
+}

@@ -111,6 +111,7 @@ interface ChatMessage {
 export default function Home() {
   const [activePage, setActivePage] = useState<string>("Dashboard");
   const [showTip, setShowTip] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Helper to dynamically get API base depending on hostname (e.g. localhost vs network IP)
   const getApiUrl = (path: string) => {
@@ -2237,7 +2238,13 @@ export default function Home() {
   return (
     <div className={styles.container}>
       {/* Sidebar Layout */}
-      <Sidebar activePage={activePage} onPageChange={setActivePage} deviceName={deviceName} />
+      <Sidebar 
+        activePage={activePage} 
+        onPageChange={setActivePage} 
+        deviceName={deviceName} 
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
 
       {/* Main Container Layout */}
       <main className={styles.mainContent}>
@@ -2249,6 +2256,7 @@ export default function Home() {
             setEditDeviceNameInput(deviceName);
             setIsEditModalOpen(true);
           }}
+          onToggleSidebar={() => setIsSidebarOpen(true)}
         />
         <div className={styles.contentWrapper}>
           {renderActiveScreen()}

@@ -188,6 +188,12 @@
   .dashboardGrid {
     grid-template-columns: 1fr;
   }
+  .mainContent {
+    margin-left: 0 !important;
+  }
+  .contentWrapper {
+    padding: 12px 20px 24px 20px !important;
+  }
 }
 
 .dashboardSection {
@@ -1724,3 +1730,55 @@
     transform: scale(1.0);
   }
 }
+
+/* Mobile & Tablet Layout Optimizations */
+@media (max-width: 1024px) {
+  .pageHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  
+  .headerControls {
+    width: 100%;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  
+  .subSearchWrapper {
+    flex: 1;
+    width: auto;
+  }
+
+  .tableCard {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .table {
+    min-width: 600px;
+  }
+
+  .modalContent {
+    width: 90% !important;
+    max-width: 450px !important;
+    padding: 24px 20px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .headerControls {
+    flex-wrap: wrap;
+  }
+  
+  .pillTabsContainer {
+    gap: 6px;
+  }
+  
+  .pillTab {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+}
+

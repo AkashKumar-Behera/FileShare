@@ -2,15 +2,16 @@
 
 import React, { useState, useEffect } from "react";
 import styles from "./Navbar.module.css";
-import { Search, Moon, Sun, ChevronDown } from "lucide-react";
+import { Search, Moon, Sun, ChevronDown, Menu } from "lucide-react";
 
 interface NavbarProps {
   username: string;
   deviceName: string;
   onEditProfile: () => void;
+  onToggleSidebar: () => void;
 }
 
-export default function Navbar({ username, deviceName, onEditProfile }: NavbarProps) {
+export default function Navbar({ username, deviceName, onEditProfile, onToggleSidebar }: NavbarProps) {
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -31,6 +32,16 @@ export default function Navbar({ username, deviceName, onEditProfile }: NavbarPr
 
   return (
     <header className={styles.navbar}>
+      {/* Mobile Sidebar Hamburger Toggle */}
+      <button
+        onClick={onToggleSidebar}
+        className={styles.menuToggle}
+        title="Toggle Menu"
+        aria-label="Toggle Menu"
+      >
+        <Menu size={22} />
+      </button>
+
       {/* Search Input Box */}
       <div className={styles.searchWrapper}>
         <Search className={styles.searchIcon} />
