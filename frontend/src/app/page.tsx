@@ -34,7 +34,10 @@ import {
   HelpCircle,
   Activity,
   Heart,
-  Settings
+  Settings,
+  Wifi,
+  Shield,
+  MoreHorizontal
 } from "lucide-react";
 
 // Interfaces for UI Data
@@ -112,6 +115,18 @@ export default function Home() {
   const [activePage, setActivePage] = useState<string>("Dashboard");
   const [showTip, setShowTip] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Devices tab state, search state, and list data
+  const [devicesTab, setDevicesTab] = useState<string>("All Devices");
+  const [devicesSearch, setDevicesSearch] = useState<string>("");
+  const [devicesList, setDevicesList] = useState([
+    { name: "Artemis-PC", ip: "192.168.1.2", type: "Windows", lastSeen: "Just now", status: "Online" },
+    { name: "Lab-PC-03", ip: "192.168.1.3", type: "Windows", lastSeen: "1 min ago", status: "Online" },
+    { name: "Android-Phone", ip: "192.168.1.8", type: "Android", lastSeen: "2 min ago", status: "Online" },
+    { name: "iPhone-14", ip: "192.168.1.12", type: "iOS", lastSeen: "5 min ago", status: "Online" },
+    { name: "DESKTOP-05", ip: "192.168.1.10", type: "Windows", lastSeen: "2 hours ago", status: "Offline" },
+    { name: "Old-Android", ip: "192.168.1.15", type: "Android", lastSeen: "1 day ago", status: "Offline" }
+  ]);
 
   // Helper to dynamically get API base depending on hostname (e.g. localhost vs network IP)
   const getApiUrl = (path: string) => {
@@ -2217,6 +2232,303 @@ export default function Home() {
     );
   };
 
+  // ----------------------------------------------------
+  // RENDER VIEW: Devices Screen (Matches ui 6.jpeg)
+  // ----------------------------------------------------
+  const renderDevices = () => {
+    // Filter lists
+    const onlineDevices = devicesList.filter(d => d.status === "Online");
+    const offlineDevices = devicesList.filter(d => d.status === "Offline");
+
+    // Filter by search
+    const getFilteredDevices = (list: typeof devicesList) => {
+      let filtered = list;
+      if (devicesSearch.trim() !== "") {
+        filtered = filtered.filter(d => 
+          d.name.toLowerCase().includes(devicesSearch.toLowerCase()) ||
+          d.ip.includes(devicesSearch) ||
+          d.type.toLowerCase().includes(devicesSearch.toLowerCase())
+        );
+      }
+      return filtered;
+    };
+
+    const displayOnline = getFilteredDevices(onlineDevices);
+    const displayOffline = getFilteredDevices(offlineDevices);
+
+    const totalCount = devicesList.length;
+    const onlineCount = onlineDevices.length;
+    const recentlySeenCount = devicesList.filter(d => d.lastSeen.includes("min") || d.lastSeen.includes("now") || d.lastSeen.includes("Just now")).length;
+    const blockedCount = 0;
+
+    const osIcon = (type: string) => {
+      switch (type.toLowerCase()) {
+        case "windows":
+          return <Laptop size={16} style={{ color: "#0078d7" }} />;
+        case "android":
+          return <Smartphone size={16} style={{ color: "#3ddc84" }} />;
+        case "ios":
+          return <Smartphone size={16} style={{ color: "#a2aaad" }} />;
+        default:
+          return <Monitor size={16} style={{ color: "var(--text-secondary)" }} />;
+      }
+    };
+
+    return (
+      <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px", width: "100%" }}>
+        {/* Header Section */}
+        <div className={styles.pageHeader}>
+          <div className={styles.titleArea}>
+            <h1>Devices</h1>
+            <span className={styles.subtitle}>Manage and connect with devices on your network.</span>
+          </div>
+          
+          <div className={styles.headerControls}>
+            <div className={styles.subSearchWrapper}>
+              <Search className={styles.subSearchIcon} />
+              <input
+                type="text"
+                className={styles.subSearchInput}
+                placeholder="Search devices..."
+                value={devicesSearch}
+                onChange={(e) => setDevicesSearch(e.target.value)}
+              />
+            </div>
+            <button className={styles.controlButton} title="More Settings">
+              <MoreHorizontal size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Stat Cards Grid */}
+        <div className={styles.devicesStatsGrid}>
+          {/* Card 1: Total Devices */}
+          <div className={styles.deviceStatCard}>
+            <div className={`${styles.deviceStatIcon} ${styles.blueStat}`}>
+              <Monitor size={22} />
+            </div>
+            <div className={styles.deviceStatContent}>
+              <span className={styles.deviceStatTitle}>Total Devices</span>
+              <span className={styles.deviceStatValue}>{totalCount}</span>
+              <span className={styles.deviceStatSubtext} style={{ color: "var(--success)", fontWeight: 600 }}>
+                {onlineCount} online
+              </span>
+            </div>
+          </div>
+
+          {/* Card 2: Online Devices */}
+          <div className={styles.deviceStatCard}>
+            <div className={`${styles.deviceStatIcon} ${styles.greenStat}`}>
+              <Wifi size={22} />
+            </div>
+            <div className={styles.deviceStatContent}>
+              <span className={styles.deviceStatTitle}>Online Devices</span>
+              <span className={styles.deviceStatValue}>{onlineCount}</span>
+              <span className={styles.deviceStatSubtext}>Connected now</span>
+            </div>
+          </div>
+
+          {/* Card 3: Recently Seen */}
+          <div className={styles.deviceStatCard}>
+            <div className={`${styles.deviceStatIcon} ${styles.purpleStat}`}>
+              <Clock size={22} />
+            </div>
+            <div className={styles.deviceStatContent}>
+              <span className={styles.deviceStatTitle}>Recently Seen</span>
+              <span className={styles.deviceStatValue}>{recentlySeenCount}</span>
+              <span className={styles.deviceStatSubtext}>In the last 7 days</span>
+            </div>
+          </div>
+
+          {/* Card 4: Blocked Devices */}
+          <div className={styles.deviceStatCard}>
+            <div className={`${styles.deviceStatIcon} ${styles.grayStat}`}>
+              <Shield size={22} />
+            </div>
+            <div className={styles.deviceStatContent}>
+              <span className={styles.deviceStatTitle}>Blocked Devices</span>
+              <span className={styles.deviceStatValue}>{blockedCount}</span>
+              <span className={styles.deviceStatSubtext}>No blocked devices</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tab Selection */}
+        <div className={styles.tabsContainer}>
+          {["All Devices", "Online", "Offline", "Recently Seen"].map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className={`${styles.tab} ${devicesTab === tab ? styles.activeTab : ""}`}
+              onClick={() => setDevicesTab(tab)}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {/* Device Lists (Tables) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          {/* Online Section */}
+          {(devicesTab === "All Devices" || devicesTab === "Online" || (devicesTab === "Recently Seen" && onlineCount > 0)) && (
+            <div className={styles.tableSection}>
+              <span className={styles.deviceSectionHeading}>Online Devices ({displayOnline.length})</span>
+              <div className={styles.tableCard}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Device Name</th>
+                      <th>IP Address</th>
+                      <th>Device Type</th>
+                      <th>Last Seen</th>
+                      <th>Status</th>
+                      <th style={{ textAlign: "right" }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayOnline.map((device, idx) => (
+                      <tr key={idx}>
+                        <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <div className={styles.tableDeviceIconWrapper}>
+                              {osIcon(device.type)}
+                            </div>
+                            {device.name}
+                          </div>
+                        </td>
+                        <td>{device.ip}</td>
+                        <td>
+                          <span className={styles.deviceTypeBadge}>{device.type}</span>
+                        </td>
+                        <td>{device.lastSeen}</td>
+                        <td>
+                          <span className={`${styles.statusDotBadge} ${styles.statusOnline}`}>Online</span>
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                            <button 
+                              className={styles.deviceActionBtn} 
+                              onClick={() => {
+                                setActiveChat(device.name);
+                                setActivePage("Chats");
+                              }}
+                              title="Send Message"
+                            >
+                              <MessageSquare size={16} />
+                            </button>
+                            <button className={styles.deviceActionBtn} title="More options">
+                              <MoreHorizontal size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {displayOnline.length === 0 && (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: "center", padding: "24px", color: "var(--text-secondary)" }}>
+                          No online devices found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Offline Section */}
+          {(devicesTab === "All Devices" || devicesTab === "Offline" || (devicesTab === "Recently Seen" && displayOffline.length > 0)) && (
+            <div className={styles.tableSection}>
+              <span className={styles.deviceSectionHeading}>Offline Devices ({displayOffline.length})</span>
+              <div className={styles.tableCard}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Device Name</th>
+                      <th>IP Address</th>
+                      <th>Device Type</th>
+                      <th>Last Seen</th>
+                      <th>Status</th>
+                      <th style={{ textAlign: "right" }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayOffline.map((device, idx) => (
+                      <tr key={idx}>
+                        <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <div className={styles.tableDeviceIconWrapper} style={{ opacity: 0.6 }}>
+                              {osIcon(device.type)}
+                            </div>
+                            {device.name}
+                          </div>
+                        </td>
+                        <td>{device.ip}</td>
+                        <td>
+                          <span className={styles.deviceTypeBadge}>{device.type}</span>
+                        </td>
+                        <td>{device.lastSeen}</td>
+                        <td>
+                          <span className={`${styles.statusDotBadge} ${styles.statusOffline}`}>Offline</span>
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                            <button 
+                              className={styles.deviceActionBtn} 
+                              onClick={() => {
+                                setActiveChat(device.name);
+                                setActivePage("Chats");
+                              }}
+                              title="Send Message"
+                              style={{ opacity: 0.5 }}
+                            >
+                              <MessageSquare size={16} />
+                            </button>
+                            <button className={styles.deviceActionBtn} title="More options">
+                              <MoreHorizontal size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {displayOffline.length === 0 && (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: "center", padding: "24px", color: "var(--text-secondary)" }}>
+                          No offline devices found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Scan Banner */}
+        <div className={styles.scanBanner}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <div className={styles.scanIconWrapper}>
+              <Activity className={isScanning ? "animate-spin" : ""} size={20} />
+            </div>
+            <div>
+              <h3 className={styles.scanBannerTitle}>Scan for Devices</h3>
+              <p className={styles.scanBannerDescription}>Discover nearby devices connected to your local network.</p>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            className={styles.scanBtn}
+            onClick={() => handleRefreshDevices()}
+            disabled={isScanning}
+          >
+            {isScanning ? "Scanning..." : "Scan Now"}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   // Active view router dispatcher
   const renderActiveScreen = () => {
     switch (activePage) {
@@ -2230,6 +2542,8 @@ export default function Home() {
         return renderReceived();
       case "Transfers":
         return renderTransfers();
+      case "Devices":
+        return renderDevices();
       default:
         return renderPlaceholderScreen(activePage);
     }

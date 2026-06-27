@@ -1782,3 +1782,226 @@
   }
 }
 
+/* Devices Page Styles (Matches ui 6.jpeg) */
+.devicesStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .devicesStatsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .devicesStatsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.deviceStatCard {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--box-shadow-sm);
+}
+
+.deviceStatIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.blueStat {
+  background-color: rgba(0, 120, 215, 0.08);
+  color: #0078d7;
+}
+
+.greenStat {
+  background-color: rgba(52, 211, 153, 0.08);
+  color: var(--success);
+}
+
+.purpleStat {
+  background-color: rgba(139, 92, 246, 0.08);
+  color: #8b5cf6;
+}
+
+.grayStat {
+  background-color: rgba(107, 114, 128, 0.08);
+  color: var(--text-secondary);
+}
+
+.deviceStatContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deviceStatTitle {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-secondary);
+}
+
+.deviceStatValue {
+  font-family: var(--font-family-outfit);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.deviceStatSubtext {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.deviceSectionHeading {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  display: block;
+}
+
+.tableDeviceIconWrapper {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--border-radius-sm);
+  background-color: rgba(94, 92, 230, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.deviceTypeBadge {
+  padding: 4px 10px;
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.statusDotBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.statusOnline {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.statusOffline {
+  background-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.deviceActionBtn {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-speed);
+}
+
+.deviceActionBtn:hover {
+  background-color: var(--primary-light);
+  color: var(--primary);
+  border-color: rgba(94, 92, 230, 0.2);
+}
+
+/* Scan Banner (Matches ui 6.jpeg) */
+.scanBanner {
+  background: linear-gradient(90deg, rgba(94, 92, 230, 0.03) 0%, rgba(94, 92, 230, 0.07) 100%);
+  border: 1px solid rgba(94, 92, 230, 0.15);
+  border-radius: var(--border-radius-md);
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}
+
+@media (max-width: 768px) {
+  .scanBanner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .scanBtn {
+    width: 100%;
+  }
+}
+
+.scanIconWrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgba(94, 92, 230, 0.1);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scanBannerTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.scanBannerDescription {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.scanBtn {
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: var(--border-radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-speed);
+}
+
+.scanBtn:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+}
+
+.scanBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+
