@@ -144,27 +144,30 @@ function StarParticlesCanvas({ enabled, intensity, speed, isDark }: { enabled: b
     };
     window.addEventListener("resize", handleResize);
 
-    const count = intensity === "Low" ? 30 : intensity === "High" ? 120 : 65;
-    const speedMult = speed === "Slow" ? 0.4 : speed === "Fast" ? 2.0 : 1.0;
+    // Minimal particle counts to ensure near-zero processor load
+    const count = intensity === "High" ? 60 : intensity === "Medium" ? 35 : 18;
+    const speedMult = speed === "Fast" ? 1.5 : speed === "Normal" ? 1.0 : 0.5;
 
     const stars = Array.from({ length: count }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
-      radius: Math.random() * 1.6 + 0.4,
-      alpha: Math.random(),
-      vx: (Math.random() - 0.5) * 0.3 * speedMult,
-      vy: (Math.random() - 0.5) * 0.3 * speedMult,
-      alphaSpeed: (Math.random() * 0.018 + 0.005) * speedMult
+      radius: Math.random() * 1.4 + 0.3,
+      alpha: Math.random() * 0.7 + 0.1,
+      vx: (Math.random() - 0.5) * 0.2 * speedMult,
+      vy: (Math.random() - 0.5) * 0.2 * speedMult,
+      alphaSpeed: (Math.random() * 0.012 + 0.003) * speedMult
     }));
 
     const render = () => {
       ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+
       stars.forEach((star) => {
         star.x += star.vx;
         star.y += star.vy;
         star.alpha += star.alphaSpeed;
 
-        if (star.alpha <= 0.1 || star.alpha >= 1) star.alphaSpeed = -star.alphaSpeed;
+        if (star.alpha <= 0.1 || star.alpha >= 0.8) star.alphaSpeed = -star.alphaSpeed;
         if (star.x < 0) star.x = width;
         if (star.x > width) star.x = 0;
         if (star.y < 0) star.y = height;
@@ -172,11 +175,10 @@ function StarParticlesCanvas({ enabled, intensity, speed, isDark }: { enabled: b
 
         ctx.beginPath();
         ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, Math.min(1, star.alpha))})`;
-        ctx.shadowBlur = 4;
-        ctx.shadowColor = "rgba(108, 99, 255, 0.8)";
+        ctx.globalAlpha = Math.max(0.1, Math.min(0.8, star.alpha));
         ctx.fill();
       });
+      ctx.globalAlpha = 1.0;
       animationFrameId = requestAnimationFrame(render);
     };
 
@@ -200,11 +202,13 @@ function StarParticlesCanvas({ enabled, intensity, speed, isDark }: { enabled: b
         width: "100%",
         height: "100%",
         pointerEvents: "none",
-        zIndex: 0
+        zIndex: 0,
+        borderRadius: "inherit"
       }}
     />
   );
 }
+
 
 export default function Home() {
 
@@ -275,8 +279,9 @@ export default function Home() {
 
   // Star Particles Settings
   const [settingsStarEnabled, setSettingsStarEnabled] = useState(true);
-  const [settingsStarIntensity, setSettingsStarIntensity] = useState("Medium");
-  const [settingsStarSpeed, setSettingsStarSpeed] = useState("Normal");
+  const [settingsStarIntensity, setSettingsStarIntensity] = useState("Low");
+  const [settingsStarSpeed, setSettingsStarSpeed] = useState("Slow");
+
 
   // Image Lightbox State
   const [lightboxData, setLightboxData] = useState<{ url: string; fileName: string; messageId?: string; chatName?: string } | null>(null);
@@ -2173,11 +2178,17 @@ export default function Home() {
         </div>
 
         {/* Right Chat Panel */}
-        <div className={`${styles.chatPanel} ${!hasActiveChat ? styles.chatPanelHiddenMobile : ""}`}>
+        <div className={`${styles.chatPanel} ${!hasActiveChat ? styles.chatPanelHiddenMobile : ""}`} style={{ position: "relative" }}>
+          <StarParticlesCanvas 
+            enabled={settingsStarEnabled} 
+            intensity={settingsStarIntensity} 
+            speed={settingsStarSpeed} 
+            isDark={settingsDarkMode} 
+          />
           {hasActiveChat ? (
             <>
               {/* Header */}
-              <div className={styles.chatPanelHeader}>
+              <div className={styles.chatPanelHeader} style={{ position: "relative", zIndex: 1 }}>
                 <div className={styles.chatPanelHeaderLeft}>
                   {/* Mobile Back Button */}
                   <button 
@@ -2211,14 +2222,9 @@ export default function Home() {
           </div>
 
           {/* Chat Messages Body */}
-          <div className={styles.chatPanelBody} style={{ position: "relative" }}>
-            <StarParticlesCanvas 
-              enabled={settingsStarEnabled} 
-              intensity={settingsStarIntensity} 
-              speed={settingsStarSpeed} 
-              isDark={settingsDarkMode} 
-            />
+          <div className={styles.chatPanelBody} style={{ position: "relative", zIndex: 1 }}>
             <span className={styles.chatDaySeparator} style={{ zIndex: 1, position: "relative" }}>Today</span>
+
 
             {activeMessages.map((msg) => (
               <div
