@@ -2233,8 +2233,9 @@ export default function Home() {
                   className={`${styles.chatBubble} ${
                     msg.sender === "you" ? styles.chatBubbleOutgoing : styles.chatBubbleIncoming
                   }`}
-                  style={{ position: "relative", group: "true" }}
+                  style={{ position: "relative" }}
                 >
+
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
                     {msg.text && <span style={{ flex: 1 }}>{msg.text}</span>}
                     
@@ -2542,6 +2543,7 @@ export default function Home() {
       </div>
     );
   };
+
 
   // ----------------------------------------------------
   // RENDER VIEW: Placeholder Screen (Chats, Sent, Favorites, Devices, Settings)
