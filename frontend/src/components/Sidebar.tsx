@@ -13,6 +13,7 @@ import {
   Laptop,
   Settings,
   X,
+  Tv,
 } from "lucide-react";
 
 interface MenuItem {
@@ -23,6 +24,7 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   { name: "Dashboard", icon: LayoutDashboard },
   { name: "Chats", icon: MessageSquare },
+  { name: "Screen Share", icon: Tv },
   { name: "My Files", icon: Folder },
   { name: "Transfers", icon: ArrowLeftRight },
   { name: "Favorites", icon: Star },
@@ -36,9 +38,13 @@ interface SidebarProps {
   deviceName: string;
   isOpen: boolean;
   onClose: () => void;
+  storageUsed?: string;
+  storagePercent?: number;
+  deviceIp?: string;
+  unreadChatCount?: number;
 }
 
-export default function Sidebar({ activePage, onPageChange, deviceName, isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ activePage, onPageChange, deviceName, isOpen, onClose, storageUsed = "0 MB", storagePercent = 1, deviceIp = "192.168.1.5", unreadChatCount = 0 }: SidebarProps) {
   return (
     <>
       {/* Backdrop overlay for mobile drawer */}
@@ -78,6 +84,9 @@ export default function Sidebar({ activePage, onPageChange, deviceName, isOpen, 
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = item.name === activePage;
+              const isChatsItem = item.name === "Chats";
+              const hasUnread = isChatsItem && unreadChatCount > 0;
+
               return (
                 <button
                   key={item.name}
@@ -89,9 +98,45 @@ export default function Sidebar({ activePage, onPageChange, deviceName, isOpen, 
                   className={`${styles.menuItem} ${
                     isActive ? styles.activeMenuItem : ""
                   }`}
+                  style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between" }}
                 >
-                  <Icon className={styles.menuIcon} strokeWidth={isActive ? 2.5 : 2} />
-                  <span>{item.name}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", position: "relative" }}>
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      <Icon className={styles.menuIcon} strokeWidth={isActive ? 2.5 : 2} />
+                      {hasUnread && (
+                        <span 
+                          style={{ 
+                            position: "absolute", 
+                            top: "-2px", 
+                            right: "-2px", 
+                            width: "8px", 
+                            height: "8px", 
+                            borderRadius: "50%", 
+                            backgroundColor: "#EF4444", 
+                            boxShadow: "0 0 8px #EF4444" 
+                          }} 
+                        />
+                      )}
+                    </div>
+                    <span>{item.name}</span>
+                  </div>
+
+                  {hasUnread && (
+                    <span 
+                      style={{ 
+                        backgroundColor: "#EF4444", 
+                        color: "#FFFFFF", 
+                        fontSize: "10px", 
+                        fontWeight: 700, 
+                        borderRadius: "10px", 
+                        padding: "2px 7px",
+                        lineHeight: 1,
+                        boxShadow: "0 2px 6px rgba(239, 68, 68, 0.4)"
+                      }}
+                    >
+                      {unreadChatCount}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -107,8 +152,8 @@ export default function Sidebar({ activePage, onPageChange, deviceName, isOpen, 
                 <Laptop size={16} strokeWidth={2.5} />
               </div>
               <div className={styles.deviceInfo}>
-                <span className={styles.deviceName}>{deviceName || "LAPTOP-01"}</span>
-                <span className={styles.deviceIp}>192.168.1.5</span>
+                <span className={styles.deviceName} suppressHydrationWarning>{deviceName || "LAPTOP-01"}</span>
+                <span className={styles.deviceIp} suppressHydrationWarning>{deviceIp}</span>
               </div>
             </div>
           </div>
@@ -116,13 +161,13 @@ export default function Sidebar({ activePage, onPageChange, deviceName, isOpen, 
           <div className={styles.storageSection}>
             <div className={styles.storageHeader}>
               <span className={styles.storageTitle}>Storage Used</span>
-              <span className={styles.storagePercentage}>12%</span>
+              <span className={styles.storagePercentage}>{storagePercent}%</span>
             </div>
             <div className={styles.storageHeader} style={{ marginTop: "-4px" }}>
-              <span className={styles.storageUsedText}>2.45 GB / 20 GB</span>
+              <span className={styles.storageUsedText}>{storageUsed} / 20 GB</span>
             </div>
             <div className={styles.progressBarContainer}>
-              <div className={styles.progressBarFill} style={{ width: "12%" }} />
+              <div className={styles.progressBarFill} style={{ width: `${Math.max(storagePercent, 2)}%` }} />
             </div>
           </div>
         </div>
