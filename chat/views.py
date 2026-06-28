@@ -39,14 +39,14 @@ class ChatViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def delete_message(self, request):
         message_id = request.data.get('message_id')
-        if not message_id:
+        if message_id is None:
             return Response({"error": "message_id required"}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            msg = Message.objects.get(id=message_id)
+            msg = Message.objects.get(id=int(message_id))
             msg.is_deleted = True
             msg.save()
             return Response({"status": "deleted"})
-        except Message.DoesNotExist:
+        except (Message.DoesNotExist, ValueError):
             return Response({"error": "Message not found"}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=False, methods=['post'])
@@ -88,6 +88,19 @@ class ChatViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(chat)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['post'])
+    def get_or_create_group(self, request):
+        chats = Chat.objects.filter(is_group=True)
+        if chats.exists():
+            chat = chats.first()
+        else:
+            chat = Chat.objects.create(is_group=True, name="Group Chat")
+            
+        all_devices = Device.objects.all()
+        chat.participants.set(all_devices)
+        serializer = self.get_serializer(chat)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post'])
     def send_message(self, request, pk=None):
         chat = self.get_object()
@@ -115,8 +128,24 @@ class ChatViewSet(viewsets.ModelViewSet):
         if key in _typing_states:
             _typing_states[key]["is_typing"] = False
             
-        serializer = MessageSerializer(message)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        msg_data = MessageSerializer(message).data
+
+        # Broadcast real-time WebSocket message to all participants
+        channel_layer = get_channel_layer()
+        if chat.is_group:
+            all_devices = Device.objects.all()
+            chat.participants.set(all_devices)
+
+        for p in chat.participants.all():
+            async_to_sync(channel_layer.group_send)(
+                f"device_{p.device_id}",
+                {
+                    "type": "chat_message_relay",
+                    "message": msg_data,
+                }
+            )
+
+        return Response(msg_data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
     def upload_attachment(self, request, pk=None):
@@ -148,6 +177,22 @@ class ChatViewSet(viewsets.ModelViewSet):
                 file_type=file.content_type
             )
             
+            # Record in Transfer history for sender & receivers
+            from transfer.models import Transfer
+            import uuid
+            for p in chat.participants.all():
+                if p.device_id != sender.device_id:
+                    Transfer.objects.create(
+                        transfer_id=f"tr-{uuid.uuid4().hex[:8]}",
+                        sender=sender,
+                        receiver=p,
+                        file_name=file.name,
+                        file_size=file.size,
+                        file_type=file.content_type or "file",
+                        status='completed',
+                        progress=1.0
+                    )
+
             msg_data = MessageSerializer(message).data
             
             # Broadcast the message to participants in the WebSocket group

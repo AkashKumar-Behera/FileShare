@@ -15,10 +15,11 @@ class MessageSerializer(serializers.ModelSerializer):
 class ChatSerializer(serializers.ModelSerializer):
     participants = DeviceSerializer(many=True, read_only=True)
     last_message = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Chat
-        fields = ['id', 'is_group', 'name', 'participants', 'last_message', 'created_at']
+        fields = ['id', 'is_group', 'name', 'participants', 'last_message', 'unread_count', 'created_at']
         read_only_fields = ['id', 'created_at']
 
     def get_last_message(self, obj):
@@ -26,3 +27,11 @@ class ChatSerializer(serializers.ModelSerializer):
         if last_msg:
             return MessageSerializer(last_msg).data
         return None
+
+    def get_unread_count(self, obj):
+        request = self.context.get('request')
+        if request:
+            device_id = request.query_params.get('device_id')
+            if device_id:
+                return obj.messages.filter(is_read=False).exclude(sender__device_id=device_id).count()
+        return obj.messages.filter(is_read=False).count()
