@@ -1,6 +1,9 @@
+import os
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.conf import settings
+from django.http import FileResponse, Http404
 from transfer.models import Transfer
 from transfer.serializers import TransferSerializer
 from devices.models import Device
@@ -55,3 +58,66 @@ class TransferViewSet(viewsets.ModelViewSet):
             
         transfer.save()
         return Response(TransferSerializer(transfer).data)
+
+    @action(detail=False, methods=['post'])
+    def upload_chunk(self, request):
+        transfer_id = request.data.get('transfer_id')
+        chunk_index = int(request.data.get('chunk_index', 0))
+        total_chunks = int(request.data.get('total_chunks', 1))
+        chunk_file = request.FILES.get('chunk')
+
+        if not transfer_id or not chunk_file:
+            return Response({"error": "transfer_id and chunk file required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        temp_dir = os.path.join(settings.MEDIA_ROOT, 'chunks', str(transfer_id))
+        os.makedirs(temp_dir, exist_ok=True)
+
+        chunk_path = os.path.join(temp_dir, f"part_{chunk_index}")
+        with open(chunk_path, 'wb+') as destination:
+            for c in chunk_file.chunks():
+                destination.write(c)
+
+        # Check if all chunks received to merge into final file
+        existing_chunks = len([f for f in os.listdir(temp_dir) if f.startswith("part_")])
+        if existing_chunks >= total_chunks:
+            try:
+                transfer = Transfer.objects.get(id=transfer_id)
+                final_dir = os.path.join(settings.MEDIA_ROOT, 'transfers')
+                os.makedirs(final_dir, exist_ok=True)
+                final_filename = f"{transfer.id}_{transfer.file_name}"
+                final_path = os.path.join(final_dir, final_filename)
+
+                with open(final_path, 'wb') as outfile:
+                    for i in range(total_chunks):
+                        part_file = os.path.join(temp_dir, f"part_{i}")
+                        if os.path.exists(part_file):
+                            with open(part_file, 'rb') as infile:
+                                outfile.write(infile.read())
+                            os.remove(part_file)
+                
+                try:
+                    os.rmdir(temp_dir)
+                except Exception:
+                    pass
+
+                transfer.status = 'completed'
+                transfer.progress = 1.0
+                transfer.save()
+                return Response({"status": "completed", "file_url": f"/media/transfers/{final_filename}"})
+            except Exception as e:
+                return Response({"error": f"Merge failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"status": "chunk_received", "received": existing_chunks, "total": total_chunks})
+
+    @action(detail=True, methods=['get'])
+    def download_file(self, request, pk=None):
+        try:
+            transfer = self.get_object()
+            final_filename = f"{transfer.id}_{transfer.file_name}"
+            file_path = os.path.join(settings.MEDIA_ROOT, 'transfers', final_filename)
+            if not os.path.exists(file_path):
+                raise Http404("File not found on server disk")
+            return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=transfer.file_name)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
