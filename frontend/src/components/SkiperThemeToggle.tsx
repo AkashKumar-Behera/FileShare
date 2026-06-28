@@ -102,6 +102,7 @@ export const SkiperThemeToggleButton = ({
       >
         <clipPath id="skiper-btn-2-navbar">
           <motion.path
+            initial={false}
             animate={{ y: isDark ? 10 : 0, x: isDark ? -12 : 0 }}
             transition={{ ease: "easeInOut", duration: 0.35 }}
             d="M0-5h30a1 1 0 0 0 9 13v24H0Z"
@@ -109,12 +110,15 @@ export const SkiperThemeToggleButton = ({
         </clipPath>
         <g clipPath="url(#skiper-btn-2-navbar)">
           <motion.circle
+            initial={false}
             animate={{ r: isDark ? 10 : 8 }}
             transition={{ ease: "easeInOut", duration: 0.35 }}
             cx="16"
             cy="16"
+            r={isDark ? 10 : 8}
           />
           <motion.g
+            initial={false}
             animate={{
               rotate: isDark ? -100 : 0,
               scale: isDark ? 0.5 : 1,
@@ -123,6 +127,7 @@ export const SkiperThemeToggleButton = ({
             transition={{ ease: "easeInOut", duration: 0.35 }}
             stroke="currentColor"
             strokeWidth="1.5"
+            style={{ opacity: isDark ? 0 : 1 }}
           >
             <path d="M16 5.5v-4" />
             <path d="M16 30.5v-4" />
