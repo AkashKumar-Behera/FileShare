@@ -18,6 +18,7 @@ import {
   FileText,
   Play,
   FolderArchive,
+  Archive,
   Image as ImageIcon,
   Smartphone,
   Monitor,
@@ -54,7 +55,17 @@ import {
   RotateCw,
   Edit3,
   Share2,
-  Sparkles
+  Sparkles,
+  UploadCloud,
+  Clipboard,
+  Users,
+  Tv,
+  Mic,
+  MicOff,
+  Maximize,
+  Minimize,
+  Minimize2,
+  VolumeX
 } from "lucide-react";
 
 
@@ -122,17 +133,39 @@ interface ChatMessage {
   file_name?: string;
   file_size?: number;
   file_type?: string;
+  reply_to_text?: string;
+  reply_to_sender?: string;
 }
 
-function StarParticlesCanvas({ enabled, intensity, speed, isDark }: { enabled: boolean; intensity: string; speed: string; isDark: boolean }) {
+
+function StarParticlesCanvas({ enabled, customWallpaperUrl }: { enabled: boolean; customWallpaperUrl?: string }) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const customImgRef = React.useRef<HTMLImageElement | null>(null);
 
   React.useEffect(() => {
-    if (!enabled || !isDark) return;
+    if (customWallpaperUrl) {
+      const img = new Image();
+      img.src = customWallpaperUrl;
+      customImgRef.current = img;
+    } else {
+      customImgRef.current = null;
+    }
+  }, [customWallpaperUrl]);
+
+  React.useEffect(() => {
+    if (!enabled) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    // Load Predefined Wallpaper Images
+    const darkWallpaper = new Image();
+    darkWallpaper.src = "/theme/dark/default.png";
+    const mobileDarkWallpaper = new Image();
+    mobileDarkWallpaper.src = "/theme/dark/default.png";
+    const lightWallpaper = new Image();
+    lightWallpaper.src = "/seen1Light.png";
 
     let animationFrameId: number;
     let width = (canvas.width = canvas.parentElement?.clientWidth || 300);
@@ -146,41 +179,33 @@ function StarParticlesCanvas({ enabled, intensity, speed, isDark }: { enabled: b
     };
     window.addEventListener("resize", handleResize);
 
-    // Minimal particle counts to ensure near-zero processor load
-    const count = intensity === "High" ? 60 : intensity === "Medium" ? 35 : 18;
-    const speedMult = speed === "Fast" ? 1.5 : speed === "Normal" ? 1.0 : 0.5;
-
-    const stars = Array.from({ length: count }, () => ({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      radius: Math.random() * 1.4 + 0.3,
-      alpha: Math.random() * 0.7 + 0.1,
-      vx: (Math.random() - 0.5) * 0.2 * speedMult,
-      vy: (Math.random() - 0.5) * 0.2 * speedMult,
-      alphaSpeed: (Math.random() * 0.012 + 0.003) * speedMult
-    }));
-
     const render = () => {
       ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+      const isCurrentlyDark = document.documentElement.classList.contains("dark");
 
-      stars.forEach((star) => {
-        star.x += star.vx;
-        star.y += star.vy;
-        star.alpha += star.alphaSpeed;
+      if (customImgRef.current && customImgRef.current.complete && customImgRef.current.naturalWidth > 0) {
+        ctx.drawImage(customImgRef.current, 0, 0, width, height);
+      } else if (isCurrentlyDark) {
+        const isMobileScreen = width < 768 || window.innerWidth < 768;
+        const activeWallpaper = isMobileScreen ? mobileDarkWallpaper : darkWallpaper;
 
-        if (star.alpha <= 0.1 || star.alpha >= 0.8) star.alphaSpeed = -star.alphaSpeed;
-        if (star.x < 0) star.x = width;
-        if (star.x > width) star.x = 0;
-        if (star.y < 0) star.y = height;
-        if (star.y > height) star.y = 0;
+        if (activeWallpaper.complete && activeWallpaper.naturalWidth > 0) {
+          ctx.drawImage(activeWallpaper, 0, 0, width, height);
+        } else if (darkWallpaper.complete && darkWallpaper.naturalWidth > 0) {
+          ctx.drawImage(darkWallpaper, 0, 0, width, height);
+        } else {
+          ctx.fillStyle = "#0c1020";
+          ctx.fillRect(0, 0, width, height);
+        }
+      } else {
+        if (lightWallpaper.complete && lightWallpaper.naturalWidth > 0) {
+          ctx.drawImage(lightWallpaper, 0, 0, width, height);
+        } else {
+          ctx.fillStyle = "#e0f2fe";
+          ctx.fillRect(0, 0, width, height);
+        }
+      }
 
-        ctx.beginPath();
-        ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
-        ctx.globalAlpha = Math.max(0.1, Math.min(0.8, star.alpha));
-        ctx.fill();
-      });
-      ctx.globalAlpha = 1.0;
       animationFrameId = requestAnimationFrame(render);
     };
 
@@ -190,9 +215,9 @@ function StarParticlesCanvas({ enabled, intensity, speed, isDark }: { enabled: b
       window.removeEventListener("resize", handleResize);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [enabled, intensity, speed, isDark]);
+  }, [enabled, customWallpaperUrl]);
 
-  if (!enabled || !isDark) return null;
+  if (!enabled) return null;
 
   return (
     <canvas
@@ -221,22 +246,11 @@ export default function Home() {
   // Devices tab state, search state, and list data
   const [devicesTab, setDevicesTab] = useState<string>("All Devices");
   const [devicesSearch, setDevicesSearch] = useState<string>("");
-  const [devicesList, setDevicesList] = useState([
-    { name: "Artemis-PC", ip: "192.168.1.2", type: "Windows", lastSeen: "Just now", status: "Online" },
-    { name: "Lab-PC-03", ip: "192.168.1.3", type: "Windows", lastSeen: "1 min ago", status: "Online" },
-    { name: "Android-Phone", ip: "192.168.1.8", type: "Android", lastSeen: "2 min ago", status: "Online" },
-    { name: "iPhone-14", ip: "192.168.1.12", type: "iOS", lastSeen: "5 min ago", status: "Online" },
-    { name: "DESKTOP-05", ip: "192.168.1.10", type: "Windows", lastSeen: "2 hours ago", status: "Offline" },
-    { name: "Old-Android", ip: "192.168.1.15", type: "Android", lastSeen: "1 day ago", status: "Offline" }
-  ]);
+  const [devicesList, setDevicesList] = useState<{ name: string; ip: string; type: string; lastSeen: string; status: string }[]>([]);
 
-  // Helper to dynamically get API base depending on hostname (e.g. localhost vs network IP)
+  // Helper to dynamically get API base (proxied securely through HTTPS server)
   const getApiUrl = (path: string) => {
-    if (typeof window !== "undefined") {
-      const hostname = window.location.hostname;
-      return `http://${hostname}:8000/api${path}`;
-    }
-    return `http://localhost:8000/api${path}`;
+    return `/api${path}`;
   };
 
   // Search filter query state per page
@@ -263,6 +277,10 @@ export default function Home() {
   const wsRef = React.useRef<WebSocket | null>(null);
   const activeChatRef = React.useRef<string>("");
   const activeChatIdRef = React.useRef<number | null>(null);
+
+  // WebRTC P2P Data Channels & Signaling References
+  const p2pFilePeerConnectionsRef = React.useRef<Record<string, RTCPeerConnection>>({});
+  const fileReceiversRef = React.useRef<Record<string, { chunks: ArrayBuffer[]; received: number; total: number; name: string; type: string; sender: string; msgId: string; chatName: string }>>({});
 
   // Profile Edit Modal States
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -291,6 +309,498 @@ export default function Home() {
   const [lightboxRotation, setLightboxRotation] = useState(0);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
+  // Custom Wallpapers & Avatar States (Local Browser Cache Storage)
+  const [chatWallpapers, setChatWallpapers] = useState<Record<string, string>>({});
+  const [userCustomAvatar, setUserCustomAvatar] = useState<string>("");
+  const [isChatWallpaperModalOpen, setIsChatWallpaperModalOpen] = useState(false);
+  const [isGroupInfoModalOpen, setIsGroupInfoModalOpen] = useState(false);
+  const [selectedWallpaperPreview, setSelectedWallpaperPreview] = useState<string>("");
+  const [deletedRecentChats, setDeletedRecentChats] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return JSON.parse(localStorage.getItem("fileshare_deleted_chats") || "[]");
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  // WebRTC Single-to-Many Screen Share States & Refs
+  const [activeScreenPresenter, setActiveScreenPresenter] = useState<{ active: boolean; presenter_name?: string; presenter_device_id?: string; audio_enabled?: boolean }>({ active: false });
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [isWatchingScreen, setIsWatchingScreen] = useState(false);
+  const [screenShareAudioMuted, setScreenShareAudioMuted] = useState(false);
+  const [isHttpsHelpModalOpen, setIsHttpsHelpModalOpen] = useState(false);
+  const [liveFrameUrl, setLiveFrameUrl] = useState<string | null>(null);
+  const [isStreamMinimized, setIsStreamMinimized] = useState(false);
+  const [isStreamFullscreen, setIsStreamFullscreen] = useState(false);
+  const [viewerAudioMuted, setViewerAudioMuted] = useState(true);
+  const [showPlayerControls, setShowPlayerControls] = useState(true);
+  const controlsTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  
+  const localScreenStreamRef = React.useRef<MediaStream | null>(null);
+  const remoteScreenStreamRef = React.useRef<MediaStream | null>(null);
+  const viewerFallbackStreamRef = React.useRef<MediaStream | null>(null);
+  const remoteVideoElementRef = React.useRef<HTMLVideoElement | null>(null);
+  const presenterVideoCaptureRef = React.useRef<HTMLVideoElement | null>(null);
+  const viewerStreamContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const peerConnectionsRef = React.useRef<Map<string, RTCPeerConnection>>(new Map());
+  const viewerPeerConnectionRef = React.useRef<RTCPeerConnection | null>(null);
+
+  // Helper to force H.264 video codec in WebRTC SDP
+  const preferH264Codec = (sdp: string): string => {
+    const lines = sdp.split("\r\n");
+    const mLineIndex = lines.findIndex(l => l.startsWith("m=video"));
+    if (mLineIndex === -1) return sdp;
+
+    let h264Payload: string | null = null;
+    for (let i = mLineIndex; i < lines.length; i++) {
+      if (lines[i].startsWith("m=") && i !== mLineIndex) break;
+      const match = lines[i].match(/a=rtpmap:(\d+)\s+H264\/90000/i);
+      if (match) {
+        h264Payload = match[1];
+        break;
+      }
+    }
+
+    if (h264Payload) {
+      const tokens = lines[mLineIndex].split(" ");
+      const header = tokens.slice(0, 3);
+      const payloads = tokens.slice(3).filter(p => p !== h264Payload);
+      lines[mLineIndex] = [...header, h264Payload, ...payloads].join(" ");
+    }
+    return lines.join("\r\n");
+  };
+
+  // WebRTC Screen Sharing Handlers
+  const createSimulatedScreenStream = (): MediaStream => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1280;
+    canvas.height = 720;
+    const ctx = canvas.getContext("2d");
+    let frame = 0;
+    
+    const draw = () => {
+      if (!ctx) return;
+      frame++;
+      const grad = ctx.createLinearGradient(0, 0, 1280, 720);
+      grad.addColorStop(0, "#0f172a");
+      grad.addColorStop(1, "#1e1b4b");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1280, 720);
+
+      ctx.fillStyle = "#6C63FF";
+      ctx.beginPath();
+      ctx.roundRect(40, 40, 360, 64, 12);
+      ctx.fill();
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 22px Inter, sans-serif";
+      ctx.fillText("📡 FileShare LAN Broadcast", 65, 80);
+
+      ctx.font = "18px Inter, sans-serif";
+      ctx.fillStyle = "#93C5FD";
+      ctx.fillText(`Presenter: ${username || "LAPTOP-01"}`, 65, 160);
+      ctx.fillText(`Status: Live Streaming via WebRTC`, 65, 195);
+      ctx.fillText(`Clock: ${new Date().toLocaleTimeString()}`, 65, 230);
+
+      // Animated visual equalizer bars
+      for (let i = 0; i < 15; i++) {
+        const h = 30 + Math.sin(frame * 0.1 + i) * 25 + Math.cos(frame * 0.05 + i) * 15;
+        ctx.fillStyle = i % 2 === 0 ? "#6C63FF" : "#EC4899";
+        ctx.fillRect(65 + i * 24, 320 - h, 16, h);
+      }
+    };
+
+    const timer = setInterval(draw, 1000 / 30);
+    const stream = canvas.captureStream(30);
+    (stream as any)._cleanupTimer = timer;
+    return stream;
+  };
+
+  const handleStartScreenShare = async () => {
+    // 1. Mobile Check (Desktop Only Presenter)
+    const isMobileDevice = typeof window !== "undefined" && (window.innerWidth < 768 || /Android|iPhone|iPad/i.test(navigator.userAgent));
+    if (isMobileDevice) {
+      toast.error("Screen sharing can only be started from PC/Desktop. Mobile users can only watch streams.");
+      return;
+    }
+
+    // 2. Check Active Presenter Status on Backend
+    try {
+      const checkRes = await fetch(getApiUrl("/calls/active_screen_share"));
+      const checkData = await checkRes.json();
+      if (checkData.active && checkData.presenter_device_id !== deviceId) {
+        toast.error(`Screen share is already active by ${checkData.presenter_name}. Only one user can share at a time.`);
+        return;
+      }
+    } catch {}
+
+    // 3. Request Real Screen or Canvas Fallback Stream
+    const mediaDevicesObj = typeof navigator !== "undefined" ? navigator.mediaDevices : null;
+    const getDisplayMediaFn = mediaDevicesObj && mediaDevicesObj.getDisplayMedia
+      ? mediaDevicesObj.getDisplayMedia.bind(mediaDevicesObj)
+      : (typeof navigator !== "undefined" ? (navigator as any).getDisplayMedia || (navigator as any).webkitGetDisplayMedia : null);
+
+    let stream: MediaStream | null = null;
+    try {
+      if (getDisplayMediaFn) {
+        stream = await getDisplayMediaFn({
+          video: {
+            width: { ideal: 1920, max: 1920 },
+            height: { ideal: 1080, max: 1080 },
+            frameRate: { ideal: 60, max: 60 },
+            cursor: "always"
+          } as any,
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          } as any
+        });
+      } else {
+        toast.info("Using LAN Stream Presenter Mode for broadcast.");
+        stream = createSimulatedScreenStream();
+      }
+    } catch (err: any) {
+      if (err.name === "NotAllowedError") return;
+      toast.info("Starting LAN Stream Presenter Mode.");
+      stream = createSimulatedScreenStream();
+    }
+
+    if (!stream) return;
+    localScreenStreamRef.current = stream;
+
+    // Notify Backend that active presenter is started
+    try {
+      const startRes = await fetch(getApiUrl("/calls/active_screen_share"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "start",
+          device_id: deviceId,
+          device_name: username || "PC User",
+          audio_enabled: true
+        })
+      });
+      const startData = await startRes.json();
+      if (startRes.status === 409) {
+        toast.error(startData.error || "Screen share already active!");
+        stream.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+        return;
+      }
+
+      setIsSharingScreen(true);
+      setActiveScreenPresenter(startData);
+      toast.success("Live screen broadcast started!");
+
+      if (stream.getVideoTracks().length > 0) {
+        stream.getVideoTracks()[0].onended = () => {
+          handleStopScreenShare();
+        };
+      }
+    } catch {
+      toast.error("Failed to sync screen share session with server.");
+    }
+  };
+
+  const handleStopScreenShare = async () => {
+    if (localScreenStreamRef.current) {
+      if ((localScreenStreamRef.current as any)._cleanupTimer) {
+        clearInterval((localScreenStreamRef.current as any)._cleanupTimer);
+      }
+      localScreenStreamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+      localScreenStreamRef.current = null;
+    }
+    setIsSharingScreen(false);
+    try {
+      await fetch(getApiUrl("/calls/active_screen_share"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "stop", device_id: deviceId })
+      });
+    } catch {}
+    setActiveScreenPresenter({ active: false });
+    toast.info("Screen broadcast ended.");
+  };
+
+  const handleToggleScreenAudio = async () => {
+    if (localScreenStreamRef.current) {
+      const audioTracks = localScreenStreamRef.current.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const nextMuted = !screenShareAudioMuted;
+        audioTracks.forEach(t => t.enabled = !nextMuted);
+        setScreenShareAudioMuted(nextMuted);
+        fetch(getApiUrl("/calls/active_screen_share"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "toggle_audio", device_id: deviceId, audio_enabled: !nextMuted })
+        }).catch(() => {});
+        toast.info(nextMuted ? "System audio share muted" : "System audio share unmuted");
+      } else {
+        toast.warning("No audio track was captured during screen share.");
+      }
+    }
+  };
+
+  const handleChangeScreen = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 60 }
+        },
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      });
+
+      if (localScreenStreamRef.current) {
+        localScreenStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+      localScreenStreamRef.current = stream;
+
+      peerConnectionsRef.current.forEach((pc) => {
+        const senders = pc.getSenders();
+        stream.getTracks().forEach(track => {
+          const sender = senders.find(s => s.track && s.track.kind === track.kind);
+          if (sender) {
+            sender.replaceTrack(track);
+          } else {
+            pc.addTrack(track, stream);
+          }
+        });
+      });
+
+      stream.getVideoTracks()[0].onended = () => {
+        handleStopScreenShare();
+      };
+
+      toast.success("Screen source changed live!");
+    } catch (err: any) {
+      if (err.name !== "NotAllowedError") {
+        toast.error("Could not change screen source.");
+      }
+    }
+  };
+
+  // Poll Active Screen Share Status & Signaling from backend
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const interval = setInterval(() => {
+      fetch(getApiUrl("/calls/active_screen_share"))
+        .then(res => res.json())
+        .then(data => {
+          if (data && typeof data === "object") {
+            setActiveScreenPresenter(data);
+            if (!data.active && isWatchingScreen) {
+              setIsWatchingScreen(false);
+              toast.info("Presenter stopped screen share.");
+            }
+          }
+        })
+        .catch(() => {});
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [isWatchingScreen]);
+
+  // WebRTC P2P Signaling Loop for Native H.264 Screen & System Audio Streaming
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !deviceId) return;
+
+    const rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+    // Viewer joining notification
+    if (isWatchingScreen && !isSharingScreen) {
+      fetch(getApiUrl("/calls/signal"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to_device: "presenter",
+          from_device: deviceId,
+          signal: { type: "viewer_join" }
+        })
+      }).catch(() => {});
+    }
+
+    const interval = setInterval(() => {
+      fetch(getApiUrl(`/calls/signal?device_id=${deviceId}`))
+        .then(res => res.json())
+        .then((signals: any[]) => {
+          if (!Array.isArray(signals)) return;
+          signals.forEach(async (item) => {
+            const senderId = item.from_device;
+            const sig = item.signal;
+            if (!sig || !senderId) return;
+
+            // PRESENTER SIDE HANDLING
+            if (isSharingScreen && localScreenStreamRef.current) {
+              if (sig.type === "viewer_join") {
+                const pc = new RTCPeerConnection(rtcConfig);
+                peerConnectionsRef.current.set(senderId, pc);
+
+                localScreenStreamRef.current.getTracks().forEach(track => {
+                  pc.addTrack(track, localScreenStreamRef.current!);
+                });
+
+                pc.onicecandidate = (e) => {
+                  if (e.candidate) {
+                    fetch(getApiUrl("/calls/signal"), {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        to_device: senderId,
+                        from_device: deviceId,
+                        signal: { type: "ice-candidate", candidate: e.candidate }
+                      })
+                    }).catch(() => {});
+                  }
+                };
+
+                const offer = await pc.createOffer();
+                offer.sdp = preferH264Codec(offer.sdp || "");
+                await pc.setLocalDescription(offer);
+
+                fetch(getApiUrl("/calls/signal"), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    to_device: senderId,
+                    from_device: deviceId,
+                    signal: { type: "sdp-offer", sdp: pc.localDescription }
+                  })
+                }).catch(() => {});
+              } else if (sig.type === "sdp-answer") {
+                const pc = peerConnectionsRef.current.get(senderId);
+                if (pc && sig.sdp) {
+                  await pc.setRemoteDescription(new RTCSessionDescription(sig.sdp));
+                }
+              } else if (sig.type === "ice-candidate") {
+                const pc = peerConnectionsRef.current.get(senderId);
+                if (pc && sig.candidate) {
+                  await pc.addIceCandidate(new RTCIceCandidate(sig.candidate));
+                }
+              }
+            }
+
+            // VIEWER SIDE HANDLING
+            if (isWatchingScreen && !isSharingScreen) {
+              if (sig.type === "sdp-offer") {
+                const pc = new RTCPeerConnection(rtcConfig);
+                viewerPeerConnectionRef.current = pc;
+
+                pc.ontrack = (e) => {
+                  if (e.streams && e.streams[0]) {
+                    remoteScreenStreamRef.current = e.streams[0];
+                    if (remoteVideoElementRef.current) {
+                      remoteVideoElementRef.current.srcObject = e.streams[0];
+                      remoteVideoElementRef.current.play().catch(() => {});
+                    }
+                  }
+                };
+
+                pc.onicecandidate = (e) => {
+                  if (e.candidate) {
+                    fetch(getApiUrl("/calls/signal"), {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        to_device: senderId,
+                        from_device: deviceId,
+                        signal: { type: "ice-candidate", candidate: e.candidate }
+                      })
+                    }).catch(() => {});
+                  }
+                };
+
+                await pc.setRemoteDescription(new RTCSessionDescription(sig.sdp));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                fetch(getApiUrl("/calls/signal"), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    to_device: senderId,
+                    from_device: deviceId,
+                    signal: { type: "sdp-answer", sdp: pc.localDescription }
+                  })
+                }).catch(() => {});
+              } else if (sig.type === "ice-candidate") {
+                const pc = viewerPeerConnectionRef.current;
+                if (pc && sig.candidate) {
+                  await pc.addIceCandidate(new RTCIceCandidate(sig.candidate));
+                }
+              }
+            }
+          });
+        })
+        .catch(() => {});
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isSharingScreen, isWatchingScreen, deviceId]);
+
+  // Real-time Screen Frame Broadcast & Viewer Sync Loop (High FPS Engine)
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !deviceId) return;
+
+    const offscreenVideo = document.createElement("video");
+    offscreenVideo.muted = true;
+    offscreenVideo.playsInline = true;
+    const offscreenCanvas = document.createElement("canvas");
+    offscreenCanvas.width = 1920;
+    offscreenCanvas.height = 1080;
+    const ctx = offscreenCanvas.getContext("2d");
+    
+    let isUploading = false;
+    let isFetching = false;
+
+    const interval = setInterval(() => {
+      if (isSharingScreen && localScreenStreamRef.current) {
+        if (offscreenVideo.srcObject !== localScreenStreamRef.current) {
+          offscreenVideo.srcObject = localScreenStreamRef.current;
+          offscreenVideo.play().catch(() => {});
+        }
+        if (ctx && offscreenVideo.readyState >= 2 && !isUploading) {
+          isUploading = true;
+          ctx.drawImage(offscreenVideo, 0, 0, 1920, 1080);
+          const frameData = offscreenCanvas.toDataURL("image/jpeg", 0.7);
+          fetch(getApiUrl("/calls/live_frame"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ device_id: deviceId, frame: frameData })
+          })
+          .catch(() => {})
+          .finally(() => { isUploading = false; });
+        }
+      } else if (isWatchingScreen && !isSharingScreen && !remoteScreenStreamRef.current) {
+        if (!isFetching) {
+          isFetching = true;
+          fetch(getApiUrl("/calls/live_frame"))
+            .then(res => res.json())
+            .then(data => {
+              if (data && data.frame) {
+                setLiveFrameUrl(data.frame);
+              }
+            })
+            .catch(() => {})
+            .finally(() => { isFetching = false; });
+        }
+      }
+    }, 40);
+
+    return () => {
+      clearInterval(interval);
+      offscreenVideo.pause();
+      offscreenVideo.srcObject = null;
+    };
+  }, [isSharingScreen, isWatchingScreen, deviceId]);
+
   // Favorites View States (ui 11.png and ui 12.png)
   const [favoritesSearch, setFavoritesSearch] = useState("");
   const [favoritesTab, setFavoritesTab] = useState<string>("All");
@@ -310,6 +820,10 @@ export default function Home() {
     }
     return [];
   });
+  const deletedMessageIdsRef = React.useRef(deletedMessageIds);
+  React.useEffect(() => {
+    deletedMessageIdsRef.current = deletedMessageIds;
+  }, [deletedMessageIds]);
 
   const handleDeleteMessage = (msgId: string, chatName: string) => {
     if (!msgId) return;
@@ -332,6 +846,30 @@ export default function Home() {
     toast.success("Message deleted");
   };
 
+  const handleDeleteMultipleMessages = (msgIds: string[], chatName: string) => {
+    if (!msgIds || msgIds.length === 0) return;
+    setDeletedMessageIds(prev => {
+      const next = [...prev, ...msgIds];
+      if (typeof window !== "undefined") {
+        localStorage.setItem("deletedMessageIds", JSON.stringify(next));
+      }
+      return next;
+    });
+    setChatMessages((prev) => ({
+      ...prev,
+      [chatName]: (prev[chatName] || []).filter((m) => !msgIds.includes(m.id))
+    }));
+    msgIds.forEach(id => {
+      fetch(getApiUrl("/chats/delete_message"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_id: id })
+      }).catch(() => {});
+    });
+    setSelectedMessageIds([]);
+    toast.success(`${msgIds.length} messages deleted`);
+  };
+
   const handleEditMessage = (msgId: string, newText: string, chatName: string) => {
     if (!msgId || !newText.trim()) return;
     setChatMessages((prev) => ({
@@ -346,22 +884,126 @@ export default function Home() {
     toast.success("Message edited");
   };
 
-  // WhatsApp Context Menu & Replying States
+  // WhatsApp Context Menu & Replying & Selection States
   const [contextMenuData, setContextMenuData] = useState<{ x: number; y: number; msg: ChatMessage; chatName: string } | null>(null);
   const [replyingTo, setReplyingTo] = useState<{ id: string; text?: string; file_name?: string; sender: string } | null>(null);
-  const [starredMessageIds, setStarredMessageIds] = useState<string[]>([]);
+  const [starredMessageIds, setStarredMessageIds] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return JSON.parse(localStorage.getItem("fileshare_starred_messages") || "[]");
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const touchTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Drag and Drop File States & Handlers
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const dragCounterRef = React.useRef(0);
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current += 1;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDraggingFile(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDraggingFile(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(false);
+    dragCounterRef.current = 0;
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      sendFilesList(e.dataTransfer.files);
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (!e.clipboardData) return;
+    const items = e.clipboardData.items;
+    const filesToUpload: File[] = [];
+
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === "file") {
+          const file = items[i].getAsFile();
+          if (file) {
+            filesToUpload.push(file);
+          }
+        }
+      }
+    }
+
+    if (filesToUpload.length > 0) {
+      e.preventDefault();
+      sendFilesList(filesToUpload);
+    }
+  };
+
+  const handleClipboardRead = async () => {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        imageInputRef.current?.click();
+        return;
+      }
+      const clipboardItems = await navigator.clipboard.read();
+      const filesToUpload: File[] = [];
+      for (const item of clipboardItems) {
+        for (const type of item.types) {
+          if (type.startsWith("image/") || type.startsWith("video/") || type.startsWith("application/")) {
+            const blob = await item.getType(type);
+            const ext = type.split("/")[1] || "png";
+            const file = new File([blob], `clipboard_${Date.now()}.${ext}`, { type });
+            filesToUpload.push(file);
+          }
+        }
+      }
+      if (filesToUpload.length > 0) {
+        sendFilesList(filesToUpload);
+      } else {
+        toast.info("No media found in clipboard. Opening gallery...");
+        imageInputRef.current?.click();
+      }
+    } catch (err) {
+      console.error("Clipboard access error:", err);
+      imageInputRef.current?.click();
+    }
+  };
+
 
   const toggleStarMessage = (msgId: string) => {
     setStarredMessageIds(prev => {
       const isStarred = prev.includes(msgId);
+      const next = isStarred ? prev.filter(id => id !== msgId) : [...prev, msgId];
+      if (typeof window !== "undefined") {
+        localStorage.setItem("fileshare_starred_messages", JSON.stringify(next));
+      }
       if (isStarred) {
         toast.info("Unstarred message");
-        return prev.filter(id => id !== msgId);
       } else {
-        toast.success("Starred message added to Favorites");
-        return [...prev, msgId];
+        toast.success("Starred item added to Favorites ⭐");
       }
+      return next;
     });
   };
 
@@ -379,19 +1021,29 @@ export default function Home() {
   // Attach Menu & File Type Refs
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
+  const chatBodyRef = React.useRef<HTMLDivElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
   const audioInputRef = React.useRef<HTMLInputElement | null>(null);
   const videoInputRef = React.useRef<HTMLInputElement | null>(null);
   const docInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (force = false) => {
+    if (!chatBodyRef.current) return;
+    const container = chatBodyRef.current;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    if (force || isNearBottom) {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    }
   };
 
   React.useEffect(() => {
-    scrollToBottom();
-  }, [chatMessages, activeChat]);
+    scrollToBottom(true);
+  }, [activeChat]);
+
+  React.useEffect(() => {
+    scrollToBottom(false);
+  }, [chatMessages]);
 
   // Handle Hardware / Browser Back Button properly
   React.useEffect(() => {
@@ -413,8 +1065,27 @@ export default function Home() {
     };
   }, [activeChat, isAttachMenuOpen]);
 
-  const [nearbyDevices, setNearbyDevices] = useState<{ name: string; ip: string; status: string }[]>([]);
-  const [recentChats, setRecentChats] = useState<{ name: string; time: string; lastMsg?: string }[]>([]);
+  const [nearbyDevices, setNearbyDevices] = useState<{ name: string; ip: string; status: string; avatar?: string }[]>([]);
+  const [recentChats, setRecentChats] = useState<{ name: string; time: string; lastMsg?: string; unread?: number }[]>([
+    { name: "Group Chat", time: "10:27 AM", lastMsg: "Welcome to Group Chat", unread: 0 }
+  ]);
+  const [peerAvatars, setPeerAvatars] = useState<Record<string, string>>({});
+
+  // Starred / Favorites State (backed by localStorage)
+  const [starredChats, setStarredChats] = useState<string[]>([]);
+  const [starredFiles, setStarredFiles] = useState<any[]>([]);
+  const [presetWallpapers, setPresetWallpapers] = useState<{ dark: any[]; light: any[]; default_dark: string | null; default_light: string | null }>({
+    dark: [
+      { name: "default.png", url: "/theme/dark/default.png" },
+      { name: "seen2dark.png", url: "/seen2dark.png" },
+      { name: "darkPhone.png", url: "/darkPhone.png" }
+    ],
+    light: [
+      { name: "seen1Light.png", url: "/seen1Light.png" }
+    ],
+    default_dark: "/theme/dark/default.png",
+    default_light: "/seen1Light.png"
+  });
 
   // Client-side initialization & self-registration
   React.useEffect(() => {
@@ -442,6 +1113,36 @@ export default function Home() {
       setDeviceName(savedDevice);
       setEditDeviceNameInput(savedDevice);
 
+      let savedAvatar = localStorage.getItem("fileshare_user_avatar");
+      if (savedAvatar) {
+        setUserCustomAvatar(savedAvatar);
+      }
+
+      try {
+        let savedWallpapers = JSON.parse(localStorage.getItem("fileshare_chat_wallpapers") || "{}");
+        setChatWallpapers(savedWallpapers);
+      } catch {}
+
+      // Fetch dynamic theme wallpapers from backend theme directory
+      fetch(getApiUrl("/settings/device_settings/theme_wallpapers"))
+        .then(res => res.json())
+        .then((data: any) => {
+          if (data && typeof data === "object") {
+            setPresetWallpapers(data);
+            const isDark = localStorage.getItem("theme") === "dark" || (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+            const defaultBg = isDark ? data.default_dark : data.default_light;
+            if (defaultBg) {
+              setChatWallpapers(prev => {
+                if (!prev["global"]) {
+                  return { ...prev, global: defaultBg };
+                }
+                return prev;
+              });
+            }
+          }
+        })
+        .catch(() => {});
+
       let savedTheme = localStorage.getItem("theme");
       if (savedTheme === "dark" || (!savedTheme && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
         setSettingsDarkMode(true);
@@ -460,7 +1161,7 @@ export default function Home() {
           username: savedUser,
           device_name: savedDevice,
           device_type: "desktop",
-          avatar: "avatar_1"
+          avatar: (typeof window !== "undefined" ? localStorage.getItem("fileshare_user_avatar") : null) || "avatar_1"
         })
       })
       .then(res => {
@@ -491,24 +1192,61 @@ export default function Home() {
         return res.json();
       })
       .then((data: any[]) => {
+        const avatarsMap: Record<string, string> = {};
         const mapped = data.map(d => {
           const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
+          if (d.avatar && d.avatar !== "avatar_1") {
+            avatarsMap[displayName] = d.avatar;
+            if (d.device_name) avatarsMap[d.device_name] = d.avatar;
+            if (d.username && d.username !== "You") avatarsMap[d.username] = d.avatar;
+            if (d.device_id) avatarsMap[d.device_id] = d.avatar;
+            if (d.ip_address) avatarsMap[d.ip_address] = d.avatar;
+          }
           return {
             name: displayName,
             ip: d.ip_address || "192.168.1.1",
-            status: d.is_online ? "online" : "offline"
+            status: d.is_online ? "online" : "offline",
+            avatar: d.avatar
           };
         });
         
+        setPeerAvatars(avatarsMap);
         setNearbyDevices(mapped);
         loadRecentChats(targetId);
-        setTimeout(() => setIsScanning(false), 800); // Small animation buffer
+        setTimeout(() => setIsScanning(false), 1500); // 1.5s animation buffer for smooth slide-out
       })
       .catch(err => {
         console.error("Discovery API request failed:", err);
         setIsScanning(false);
       });
+
+    // Fetch all real registered devices for Devices tab view
+    fetch(getApiUrl("/devices"))
+      .then(res => res.json())
+      .then((allDevs: any[]) => {
+        if (Array.isArray(allDevs) && allDevs.length > 0) {
+          const formatted = allDevs.map(d => ({
+            name: (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name,
+            ip: d.ip_address || "192.168.1.1",
+            type: (d.device_type && d.device_type.toLowerCase() === "mobile") ? "Android" : ((d.device_type && d.device_type.toLowerCase() === "tablet") ? "iOS" : "Windows"),
+            lastSeen: d.is_online ? "Just now" : (d.last_seen ? new Date(d.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Recently"),
+            status: d.is_online ? "Online" : "Offline"
+          }));
+          setDevicesList(formatted);
+        }
+      })
+      .catch(() => {});
   };
+
+  React.useEffect(() => {
+    if (deviceId) {
+      handleRefreshDevices(deviceId);
+      const interval = setInterval(() => {
+        handleRefreshDevices(deviceId);
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [deviceId, activePage]);
 
   // Load recent chats from Django
   const loadRecentChats = (myId = deviceId) => {
@@ -523,17 +1261,68 @@ export default function Home() {
       .then((data: any[]) => {
         const formatted = data.map(chat => {
           const other = chat.participants.find((p: any) => p.device_id !== targetId);
-          const name = other ? other.device_name : (chat.name || "Group Chat");
+          const name = other ? (other.username || other.device_name) : (chat.name || "Group Chat");
           const time = chat.last_message ? new Date(chat.last_message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "New Chat";
+          
+          let snippet = "";
+          if (chat.last_message) {
+            if (chat.last_message.text && chat.last_message.text.trim() !== "") {
+              snippet = chat.last_message.text;
+            } else if (chat.last_message.file_name) {
+              const fType = (chat.last_message.file_type || "").toLowerCase();
+              if (fType.includes("image") || ["jpg", "png", "jpeg"].some(ext => chat.last_message.file_name.toLowerCase().endsWith(ext))) {
+                snippet = "📷 Photo";
+              } else if (fType.includes("video") || chat.last_message.file_name.toLowerCase().endsWith("mp4")) {
+                snippet = "🎥 Video";
+              } else if (fType.includes("audio") || chat.last_message.file_name.toLowerCase().endsWith("mp3")) {
+                snippet = "🎵 Audio";
+              } else {
+                snippet = "📄 " + chat.last_message.file_name;
+              }
+            }
+          }
+
           return {
             name: name,
             time: time,
-            lastMsg: chat.last_message ? chat.last_message.text : ""
+            lastMsg: snippet,
+            unread: chat.unread_count || 0
           };
         });
-        setRecentChats(formatted);
+
+        const hasGroupChat = formatted.some(c => c.name === "Group Chat");
+        if (!hasGroupChat) {
+          formatted.unshift({
+            name: "Group Chat",
+            time: "10:27 AM",
+            lastMsg: "Welcome to Group Chat",
+            unread: 0
+          });
+        }
+
+        setRecentChats(formatted.filter(c => c.name === "Group Chat" || !deletedRecentChats.includes(c.name)));
       })
-      .catch(err => console.error("Recent chats fetch error:", err));
+      .catch(err => {
+        console.error("Recent chats fetch error:", err);
+        setRecentChats([
+          { name: "Group Chat", time: "10:27 AM", lastMsg: "Welcome to Group Chat", unread: 0 }
+        ]);
+      });
+  };
+
+  const handleDeleteRecentChat = (chatName: string) => {
+    setDeletedRecentChats(prev => {
+      const next = [...prev, chatName];
+      if (typeof window !== "undefined") {
+        localStorage.setItem("fileshare_deleted_chats", JSON.stringify(next));
+      }
+      return next;
+    });
+    setRecentChats(prev => prev.filter(c => c.name !== chatName));
+    if (activeChat === chatName) {
+      setActiveChat("");
+    }
+    toast.success(`Removed chat with ${chatName}`);
   };
 
   // Helper formatting methods
@@ -605,11 +1394,15 @@ export default function Home() {
         });
         setTransfers(formatted);
       })
-      .catch(err => console.error("Transfers fetch error:", err));
+      .catch(() => {
+        // Silently catch polling network errors to prevent console spam when backend is reconnecting
+      });
   };
 
 
   // Sync profile edits with Django
+  const [tempAvatarInput, setTempAvatarInput] = useState<string>("");
+
   const handleSaveProfile = () => {
     const finalUser = editUsernameInput.trim() || "You";
     const finalDevice = editDeviceNameInput.trim() || "LAPTOP-01";
@@ -618,6 +1411,10 @@ export default function Home() {
     setDeviceName(finalDevice);
     localStorage.setItem("username", finalUser);
     localStorage.setItem("deviceName", finalDevice);
+    if (tempAvatarInput) {
+      setUserCustomAvatar(tempAvatarInput);
+      localStorage.setItem("fileshare_user_avatar", tempAvatarInput);
+    }
     setIsEditModalOpen(false);
 
     fetch(getApiUrl("/devices/register"), {
@@ -628,7 +1425,7 @@ export default function Home() {
         username: finalUser,
         device_name: finalDevice,
         device_type: "desktop",
-        avatar: "avatar_1"
+        avatar: tempAvatarInput || userCustomAvatar || "avatar_1"
       })
     })
     .then(res => res.json())
@@ -636,6 +1433,38 @@ export default function Home() {
       handleRefreshDevices();
     })
     .catch(err => console.error("Failed to sync profile:", err));
+  };
+
+  // Wallpaper Handlers
+  const handleSetWallpaper = (target: "chat" | "global" | "reset") => {
+    if (target === "reset") {
+      const next = { ...chatWallpapers };
+      delete next[activeChat];
+      delete next["global"];
+      setChatWallpapers(next);
+      localStorage.setItem("fileshare_chat_wallpapers", JSON.stringify(next));
+      toast.success("Wallpaper reset to default");
+    } else if (target === "chat") {
+      if (!selectedWallpaperPreview) {
+        toast.error("Please choose an image file first");
+        return;
+      }
+      const next = { ...chatWallpapers, [activeChat]: selectedWallpaperPreview };
+      setChatWallpapers(next);
+      localStorage.setItem("fileshare_chat_wallpapers", JSON.stringify(next));
+      toast.success(`Wallpaper updated for ${activeChat}`);
+    } else if (target === "global") {
+      if (!selectedWallpaperPreview) {
+        toast.error("Please choose an image file first");
+        return;
+      }
+      const next = { ...chatWallpapers, global: selectedWallpaperPreview };
+      setChatWallpapers(next);
+      localStorage.setItem("fileshare_chat_wallpapers", JSON.stringify(next));
+      toast.success("Default wallpaper updated for all chats");
+    }
+    setIsChatWallpaperModalOpen(false);
+    setSelectedWallpaperPreview("");
   };
 
   // Sync refs for WebSocket closures
@@ -647,23 +1476,65 @@ export default function Home() {
     activeChatIdRef.current = activeChatId;
   }, [activeChatId]);
 
+  const handleOpenChat = (name: string) => {
+    setActiveChat(name);
+    setRecentChats(prev => prev.map(c => c.name === name ? { ...c, unread: 0 } : c));
+  };
+
   // Load chat session dynamically from Django
   React.useEffect(() => {
-    if (!deviceId || activeChat === "Project-Group" || !activeChat) {
-      setActiveChatId(null);
+    if (activeChat) {
+      setRecentChats(prev => prev.map(c => c.name === activeChat ? { ...c, unread: 0 } : c));
+    }
+    setActiveChatId(null);
+    if (!deviceId || !activeChat) {
+      return;
+    }
+
+    if (activeChat === "Group Chat" || activeChat === "Project-Group") {
+      fetch(getApiUrl("/chats/get_or_create_group"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      })
+      .then(res => res.json())
+      .then(chatObj => {
+        setActiveChatId(chatObj.id);
+        fetch(getApiUrl(`/chats/${chatObj.id}/messages`))
+          .then(res => res.json())
+          .then((msgData: any[]) => {
+            const formatted = msgData
+              .filter(m => !m.is_deleted && !deletedMessageIdsRef.current.includes(String(m.id)))
+              .map(m => ({
+                id: String(m.id),
+                sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
+                text: m.text,
+                time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                file: m.file,
+                file_name: m.file_name,
+                file_size: m.file_size,
+                file_type: m.file_type
+              }));
+            setChatMessages(prev => ({
+              ...prev,
+              [activeChat]: formatted
+            }));
+          });
+      })
+      .catch(err => console.error("Group chat session error:", err));
       return;
     }
 
     fetch(getApiUrl("/devices/online_devices"))
-      .then(res => {
-        if (!res.ok) throw new Error();
-        return res.json();
-      })
+      .then(res => res.json())
       .then((data: any[]) => {
-        const targetDevice = data.find(d => {
+        let targetDevice = data.find(d => {
           const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
           return displayName === activeChat;
         });
+
+        if (!targetDevice) {
+          targetDevice = data.find(d => d.device_name === activeChat || d.username === activeChat);
+        }
 
         if (targetDevice) {
           fetch(getApiUrl("/chats/get_or_create_direct"), {
@@ -682,7 +1553,7 @@ export default function Home() {
               .then(res => res.json())
               .then((msgData: any[]) => {
                 const formatted = msgData
-                  .filter(m => !m.is_deleted && !deletedMessageIds.includes(String(m.id)))
+                  .filter(m => !m.is_deleted && !deletedMessageIdsRef.current.includes(String(m.id)))
                   .map(m => ({
                     id: String(m.id),
                     sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
@@ -698,13 +1569,42 @@ export default function Home() {
                   [activeChat]: formatted
                 }));
               });
-
           });
+        } else {
+          // Fallback lookup from user's chats list for offline devices
+          fetch(getApiUrl(`/chats/device_chats?device_id=${deviceId}`))
+            .then(res => res.json())
+            .then((chats: any[]) => {
+              if (Array.isArray(chats)) {
+                const match = chats.find(c => c.participants_details?.some((p: any) => p.username === activeChat || p.device_name === activeChat));
+                if (match) {
+                  setActiveChatId(match.id);
+                  fetch(getApiUrl(`/chats/${match.id}/messages`))
+                    .then(res => res.json())
+                    .then((msgData: any[]) => {
+                      const formatted = msgData
+                        .filter(m => !m.is_deleted && !deletedMessageIdsRef.current.includes(String(m.id)))
+                        .map(m => ({
+                          id: String(m.id),
+                          sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
+                          text: m.text,
+                          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                          file: m.file,
+                          file_name: m.file_name,
+                          file_size: m.file_size,
+                          file_type: m.file_type
+                        }));
+                      setChatMessages(prev => ({
+                        ...prev,
+                        [activeChat]: formatted
+                      }));
+                    });
+                }
+              }
+            }).catch(() => {});
         }
       })
-      .catch(err => {
-        // Silent catch
-      });
+      .catch(() => {});
   }, [activeChat, deviceId]);
 
   // WebSocket manager for real-time messages & presence status updates
@@ -742,8 +1642,23 @@ export default function Home() {
             file: msg.file,
             file_name: msg.file_name,
             file_size: msg.file_size,
-            file_type: msg.file_type
+            file_type: msg.file_type,
+            reply_to_text: msg.reply_to_text,
+            reply_to_sender: msg.reply_to_sender
           };
+
+
+          // Play notification sound if message is from someone else and chat is inactive or window hidden
+          if (msg.sender_id !== deviceId) {
+            if (activeChatIdRef.current !== msg.chat_id || (typeof document !== "undefined" && document.hidden)) {
+              try {
+                const audio = new Audio('/notification.mp3');
+                audio.play().catch(e => console.log("Audio play deferred or blocked:", e));
+              } catch (e) {
+                console.error("Audio error:", e);
+              }
+            }
+          }
 
           if (activeChatIdRef.current === msg.chat_id) {
             setChatMessages(prev => {
@@ -774,6 +1689,8 @@ export default function Home() {
                 }
               });
           }
+        } else if (data.type === "signal") {
+          handleWebRTCSignal(data.sender_id, data.sub_type, data.data);
         }
       } catch (err) {
         console.error("Failed to parse WS payload:", err);
@@ -795,7 +1712,7 @@ export default function Home() {
             username: username,
             device_name: deviceName,
             device_type: "desktop",
-            avatar: "avatar_1"
+            avatar: userCustomAvatar || "avatar_1"
           })
         }).catch(() => {});
       }
@@ -816,7 +1733,7 @@ export default function Home() {
         .then(res => res.json())
         .then((msgData: any[]) => {
           const formatted = msgData
-            .filter(m => !m.is_deleted && !deletedMessageIds.includes(String(m.id)))
+            .filter(m => !m.is_deleted && !deletedMessageIdsRef.current.includes(String(m.id)))
             .map(m => ({
               id: String(m.id),
               sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
@@ -916,6 +1833,28 @@ export default function Home() {
     const inputVal = messageInput;
     setMessageInput("");
 
+    const replyData = replyingTo ? {
+      reply_to_text: replyingTo.text || replyingTo.file_name || "Attachment",
+      reply_to_sender: replyingTo.sender
+    } : {};
+    setReplyingTo(null);
+
+    const localMsg: ChatMessage = {
+      id: "temp-" + Date.now(),
+      sender: "you",
+      text: inputVal,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      ...replyData
+    };
+
+    setChatMessages(prev => {
+      const current = prev[activeChat] || [];
+      return {
+        ...prev,
+        [activeChat]: [...current, localMsg]
+      };
+    });
+
     fetch(getApiUrl("/devices/online_devices"))
       .then(res => res.json())
       .then((data: any[]) => {
@@ -931,7 +1870,8 @@ export default function Home() {
               type: "chat_message",
               target_id: targetDevice.device_id,
               chat_id: activeChatId,
-              text: inputVal
+              text: inputVal,
+              ...replyData
             }));
           } else {
             // Fallback to HTTP POST
@@ -940,87 +1880,166 @@ export default function Home() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 sender_id: deviceId,
-                text: inputVal
+                text: inputVal,
+                ...replyData
               })
             })
-            .then(res => res.json())
-            .then(() => {
-              fetch(getApiUrl(`/chats/${activeChatId}/messages`))
-                .then(r => r.json())
-                .then((msgData: any[]) => {
-                  const formatted = msgData.map(m => ({
-                    id: String(m.id),
-                    sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
-                    text: m.text,
-                    time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                  }));
-                  setChatMessages(prev => ({
-                    ...prev,
-                    [activeChat]: formatted
-                  }));
-                });
-            });
+            .catch(() => {});
           }
         }
       });
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0 || !activeChatId) return;
 
-    fetch(getApiUrl("/devices/online_devices"))
-      .then(res => res.json())
-      .then((data: any[]) => {
-        const targetDevice = data.find(d => {
-          const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
-          return displayName === activeChat;
+  const handleWebRTCSignal = async (senderId: string, subType: string, signalData: any) => {
+    try {
+      let pc = p2pFilePeerConnectionsRef.current[senderId];
+      if (!pc || pc.signalingState === "closed") {
+        pc = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
         });
+        p2pFilePeerConnectionsRef.current[senderId] = pc;
 
-        if (targetDevice) {
-          const formData = new FormData();
-          formData.append("sender_id", deviceId);
-          Array.from(files).forEach(file => {
-            formData.append("files", file);
-          });
+        pc.onicecandidate = (e: RTCPeerConnectionIceEvent) => {
+          if (e.candidate && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+              type: "signal",
+              target_id: senderId,
+              sub_type: "candidate",
+              call_type: "file",
+              data: e.candidate
+            }));
+          }
+        };
 
-          fetch(getApiUrl(`/chats/${activeChatId}/upload_attachment`), {
-            method: "POST",
-            body: formData
-          })
-          .then(res => {
-            if (!res.ok) throw new Error("Upload failed");
-            return res.json();
-          })
-          .then(msgs => {
-            console.log("Uploaded successfully:", msgs);
-            toast.success(`${files.length} file(s) attached successfully!`);
-            // Refresh messages list
-            fetch(getApiUrl(`/chats/${activeChatId}/messages`))
-              .then(r => r.json())
-              .then((msgData: any[]) => {
-                const formatted = msgData.map(m => ({
-                  id: String(m.id),
-                  sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
-                  text: m.text,
-                  time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  file: m.file,
-                  file_name: m.file_name,
-                  file_size: m.file_size,
-                  file_type: m.file_type
-                }));
-                setChatMessages(prev => ({
-                  ...prev,
-                  [activeChat]: formatted
-                }));
-              });
-          })
-          .catch(err => {
-            console.error("Upload error:", err);
-            alert("File upload failed!");
-          });
+        pc.ondatachannel = (e: RTCDataChannelEvent) => {
+          const dc = e.channel;
+          dc.binaryType = "arraybuffer";
+          let fileMeta: any = null;
+          let chunks: ArrayBuffer[] = [];
+          let receivedSize = 0;
+
+          dc.onmessage = (evt: MessageEvent) => {
+            if (typeof evt.data === "string") {
+              try {
+                fileMeta = JSON.parse(evt.data);
+                chunks = [];
+                receivedSize = 0;
+              } catch {}
+            } else if (evt.data instanceof ArrayBuffer) {
+              chunks.push(evt.data);
+              receivedSize += evt.data.byteLength;
+              if (fileMeta && receivedSize >= fileMeta.size) {
+                const blob = new Blob(chunks, { type: fileMeta.type || "application/octet-stream" });
+                const blobUrl = URL.createObjectURL(blob);
+                
+                const receivedMsg: ChatMessage = {
+                  id: "p2p-rx-" + Date.now() + "-" + Math.random().toString(36).substring(2, 5),
+                  sender: "other",
+                  text: `Shared attachment: ${fileMeta.name}`,
+                  time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  file: blobUrl,
+                  file_name: fileMeta.name,
+                  file_size: fileMeta.size,
+                  file_type: fileMeta.type
+                };
+
+                setChatMessages(prev => {
+                  const current = prev[activeChatRef.current] || [];
+                  return {
+                    ...prev,
+                    [activeChatRef.current]: [...current, receivedMsg]
+                  };
+                });
+                toast.success(`Received P2P file: ${fileMeta.name}`);
+              }
+            }
+          };
+        };
+      }
+
+      if (subType === "offer") {
+        await pc.setRemoteDescription(new RTCSessionDescription(signalData));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
+            type: "signal",
+            target_id: senderId,
+            sub_type: "answer",
+            call_type: "file",
+            data: answer
+          }));
         }
+      } else if (subType === "answer") {
+        await pc.setRemoteDescription(new RTCSessionDescription(signalData));
+      } else if (subType === "candidate") {
+        await pc.addIceCandidate(new RTCIceCandidate(signalData)).catch(() => {});
+      }
+    } catch (err) {
+      console.error("WebRTC Signaling error:", err);
+    }
+  };
+
+  const sendFilesList = (files: FileList | File[]) => {
+    if (!files || files.length === 0 || !activeChat) return;
+
+    const fileArray = Array.from(files);
+
+    // 1. Render local message bubbles for instant sender preview
+    fileArray.forEach(file => {
+      const localBlobUrl = URL.createObjectURL(file);
+      const localMsg: ChatMessage = {
+        id: "tx-temp-" + Date.now() + "-" + Math.random().toString(36).substring(2, 5),
+        sender: "you",
+        text: `Shared attachment: ${file.name}`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        file: localBlobUrl,
+        file_name: file.name,
+        file_size: file.size,
+        file_type: file.type
+      };
+
+      setChatMessages(prev => {
+        const current = prev[activeChat] || [];
+        return {
+          ...prev,
+          [activeChat]: [...current, localMsg]
+        };
       });
+    });
+
+    // 2. Upload via Django backend endpoint if activeChatId is available
+    if (activeChatId) {
+      const formData = new FormData();
+      formData.append("sender_id", deviceId);
+      fileArray.forEach(file => {
+        formData.append("files", file);
+      });
+
+      fetch(getApiUrl(`/chats/${activeChatId}/upload_attachment`), {
+        method: "POST",
+        body: formData
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("Upload failed");
+        return res.json();
+      })
+      .then(() => {
+        toast.success(`Sent ${fileArray.length} file(s)`);
+        loadRealTransfers(deviceId);
+        loadRecentChats(deviceId);
+      })
+      .catch(err => {
+        console.error("Attachment upload error:", err);
+      });
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      sendFilesList(e.target.files);
+    }
   };
 
   // Mock State Data
@@ -1050,9 +2069,8 @@ export default function Home() {
       }));
     setReceivedFiles(rx);
 
-    // Derived myFiles
+    // Derived myFiles (All files shared on this device)
     const my = transfers
-      .filter(t => t.direction === "send" && t.status === "Completed")
       .map((t, idx) => ({
         id: `mf-${idx}`,
         name: t.fileName,
@@ -1089,8 +2107,8 @@ export default function Home() {
 
   // Total counts helper
   const storageTotal = 20;
-  const storageUsed = 2.45;
-  const storagePercentage = Math.round((storageUsed / storageTotal) * 100);
+  const storageUsed = Number((myFiles.length * 0.15).toFixed(2)) || 0.05;
+  const storagePercentage = Math.max(1, Math.round((storageUsed / storageTotal) * 100));
 
   // Activity functions
   const handleDeleteActivity = (id: string) => {
@@ -1169,6 +2187,85 @@ export default function Home() {
     if (t === "rar") return { icon: FolderArchive, className: styles.rarIcon };
     if (t === "mp3" || t === "audio") return { icon: Volume2, className: styles.mp4Icon };
     return { icon: FileText, className: styles.txtIcon };
+  };
+
+  const handlePreviewFile = (fileName: string, fileType?: string, customUrl?: string) => {
+    const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
+    let url = customUrl;
+    if (!url) {
+      url = `http://${hostname}:8000/media/chat_attachments/${fileName}`;
+    } else if (url.startsWith("/")) {
+      url = `http://${hostname}:8000${url}`;
+    }
+    setLightboxData({
+      url,
+      fileName
+    });
+    setLightboxFilter("none");
+    setLightboxRotation(0);
+  };
+
+  const renderFileThumbnail = (fileName: string, fileType: string, customUrl?: string, iconSize = 18, styleOverride?: React.CSSProperties) => {
+    const { icon: IconComponent, className } = getFileIconComponent(fileType || "");
+    const ext = (fileName.split('.').pop() || "").toLowerCase();
+    const typeLower = (fileType || "").toLowerCase();
+    const isImage = ["jpg", "png", "jpeg", "webp", "gif", "svg", "image"].includes(typeLower) ||
+                    ["jpg", "png", "jpeg", "webp", "gif", "svg"].includes(ext);
+
+    const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
+    let src = customUrl;
+    if (!src) {
+      src = `http://${hostname}:8000/media/chat_attachments/${fileName}`;
+    } else if (src.startsWith("/")) {
+      src = `http://${hostname}:8000${src}`;
+    }
+
+    if (isImage) {
+      return (
+        <div 
+          className={`${styles.fileIconWrapper} ${className}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            handlePreviewFile(fileName, fileType, customUrl);
+          }}
+          title="Click to view image preview"
+          style={{ 
+            position: "relative", 
+            overflow: "hidden", 
+            cursor: "pointer", 
+            padding: 0,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+            ...styleOverride
+          }}
+        >
+          <img 
+            src={src} 
+            alt={fileName} 
+            onError={(e) => {
+              const target = e.currentTarget;
+              const directMedia = `http://${hostname}:8000/media/${fileName}`;
+              if (target.src !== directMedia && target.src.includes("/chat_attachments/")) {
+                target.src = directMedia;
+              } else {
+                target.style.display = "none";
+                const parent = target.parentElement;
+                if (parent) {
+                  parent.style.padding = "8px";
+                  parent.innerHTML = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`;
+                }
+              }
+            }}
+            style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className={`${styles.fileIconWrapper} ${className}`} style={styleOverride}>
+        <IconComponent size={iconSize} />
+      </div>
+    );
   };
 
   // Dynamic Filtering for My Files Page
@@ -1303,14 +2400,14 @@ export default function Home() {
         <div className={styles.dashboardSection}>
           <div className={styles.dashboardStatsGrid}>
             {/* Total Files Card */}
-            <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "20px 24px", cursor: "default" }}>
+            <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "20px 24px", cursor: "pointer" }} onClick={() => setActivePage("My Files")}>
               <div className={styles.actionIconWrapper} style={{ width: "48px", height: "48px", borderRadius: "12px" }}>
                 <FolderOpen size={20} strokeWidth={2.5} />
               </div>
               <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "4px" }}>
                 <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-secondary)" }}>Total Files</span>
-                <span style={{ fontSize: "26px", fontWeight: 700, fontFamily: "var(--font-family-outfit)", color: "var(--text-primary)", lineHeight: 1.1 }}>128</span>
-                <span style={{ fontSize: "12px", color: "var(--success)", fontWeight: 600 }}>↑ 12% <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>from last week</span></span>
+                <span style={{ fontSize: "26px", fontWeight: 700, fontFamily: "var(--font-family-outfit)", color: "var(--text-primary)", lineHeight: 1.1 }}>{myFiles.length}</span>
+                <span style={{ fontSize: "12px", color: "var(--success)", fontWeight: 600 }}>Real-time sync</span>
               </div>
             </div>
 
@@ -1321,8 +2418,8 @@ export default function Home() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "4px" }}>
                 <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-secondary)" }}>Total Transfers</span>
-                <span style={{ fontSize: "26px", fontWeight: 700, fontFamily: "var(--font-family-outfit)", color: "var(--text-primary)", lineHeight: 1.1 }}>24</span>
-                <span style={{ fontSize: "12px", color: "var(--success)", fontWeight: 600 }}>↑ 8% <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>from last week</span></span>
+                <span style={{ fontSize: "26px", fontWeight: 700, fontFamily: "var(--font-family-outfit)", color: "var(--text-primary)", lineHeight: 1.1 }}>{transfers.length}</span>
+                <span style={{ fontSize: "12px", color: "var(--success)", fontWeight: 600 }}>Active history</span>
               </div>
             </div>
 
@@ -1333,20 +2430,20 @@ export default function Home() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "4px" }}>
                 <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-secondary)" }}>Storage Used</span>
-                <span style={{ fontSize: "26px", fontWeight: 700, fontFamily: "var(--font-family-outfit)", color: "var(--text-primary)", lineHeight: 1.1 }}>2.45 GB</span>
-                <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>of 20 GB used</span>
+                <span style={{ fontSize: "26px", fontWeight: 700, fontFamily: "var(--font-family-outfit)", color: "var(--text-primary)", lineHeight: 1.1 }}>{myFiles.length * 2.5 > 1024 ? `${((myFiles.length * 2.5) / 1024).toFixed(1)} GB` : `${(myFiles.length * 2.5).toFixed(0)} MB`}</span>
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>Local disk</span>
               </div>
             </div>
 
             {/* Connected Devices Card */}
-            <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "20px 24px", cursor: "default" }}>
+            <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "20px 24px", cursor: "pointer" }} onClick={() => setActivePage("Devices")}>
               <div className={styles.actionIconWrapper} style={{ width: "48px", height: "48px", borderRadius: "12px", backgroundColor: "rgba(94, 92, 230, 0.08)", color: "var(--primary)" }}>
                 <Laptop size={20} strokeWidth={2.5} />
               </div>
               <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "4px" }}>
                 <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-secondary)" }}>Connected Devices</span>
-                <span style={{ fontSize: "26px", fontWeight: 700, fontFamily: "var(--font-family-outfit)", color: "var(--text-primary)", lineHeight: 1.1 }}>4</span>
-                <span style={{ fontSize: "12px", color: "var(--success)", fontWeight: 600 }}>2 online</span>
+                <span style={{ fontSize: "26px", fontWeight: 700, fontFamily: "var(--font-family-outfit)", color: "var(--text-primary)", lineHeight: 1.1 }}>{devicesList.length || nearbyDevices.length}</span>
+                <span style={{ fontSize: "12px", color: "var(--success)", fontWeight: 600 }}>{nearbyDevices.filter(d => d.status === "online").length + 1} online</span>
               </div>
             </div>
           </div>
@@ -1397,13 +2494,10 @@ export default function Home() {
             </div>
             <div className={styles.listCard}>
               {recentFiles.map((file) => {
-                const { icon: IconComponent, className } = getFileIconComponent(file.type);
                 return (
                   <div key={file.id} className={styles.listItem}>
                     <div className={styles.itemLeft}>
-                      <div className={`${styles.fileIconWrapper} ${className}`} style={{ width: "32px", height: "32px", borderRadius: "6px" }}>
-                        <IconComponent size={16} />
-                      </div>
+                      {renderFileThumbnail(file.fileName, file.type, (file as any).url, 16, { width: "32px", height: "32px", borderRadius: "6px" })}
                       <div className={styles.itemDetails}>
                         <span className={styles.itemTitle}>{file.fileName}</span>
                       </div>
@@ -1540,6 +2634,11 @@ export default function Home() {
   // RENDER VIEW: My Files UI (ui (3).jpeg)
   // ----------------------------------------------------
   const renderMyFiles = () => {
+    const totalFilesCount = myFiles.length;
+    const imagesCount = myFiles.filter(f => ["PNG", "JPG", "JPEG", "GIF", "WEBP", "SVG", "IMAGE"].includes(String(f.type).toUpperCase())).length;
+    const docsCount = myFiles.filter(f => ["PDF", "DOC", "DOCX", "TXT", "PPTX", "XLSX", "DOCUMENT"].includes(String(f.type).toUpperCase())).length;
+    const archivesCount = myFiles.filter(f => ["ZIP", "RAR", "7Z", "TAR", "ARCHIVE"].includes(String(f.type).toUpperCase())).length;
+
     return (
       <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
         {/* Header Section */}
@@ -1573,20 +2672,20 @@ export default function Home() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
               <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Total Files</span>
-              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>156</span>
-              <span style={{ fontSize: "11px", color: "var(--success)", fontWeight: 600 }}>↑ 10 <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>this week</span></span>
+              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>{totalFilesCount}</span>
+              <span style={{ fontSize: "11px", color: "var(--success)", fontWeight: 600 }}>Real-time sync</span>
             </div>
           </div>
 
-          {/* Total Size Card */}
+          {/* Documents Card */}
           <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "16px 20px", cursor: "default" }}>
             <div className={styles.actionIconWrapper} style={{ borderRadius: "10px", backgroundColor: "rgba(59, 130, 246, 0.08)", color: "var(--info)" }}>
-              <HardDrive size={16} />
+              <FileText size={16} />
             </div>
             <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Total Size</span>
-              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>2.45 GB</span>
-              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>of 20 GB used</span>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Documents</span>
+              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>{docsCount}</span>
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>{totalFilesCount > 0 ? Math.round((docsCount / totalFilesCount) * 100) : 0}% of files</span>
             </div>
           </div>
 
@@ -1597,20 +2696,20 @@ export default function Home() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
               <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Images</span>
-              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>68</span>
-              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>43% of total files</span>
+              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>{imagesCount}</span>
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>{totalFilesCount > 0 ? Math.round((imagesCount / totalFilesCount) * 100) : 0}% of files</span>
             </div>
           </div>
 
-          {/* Folders Card */}
+          {/* Archives Card */}
           <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "16px 20px", cursor: "default" }}>
             <div className={styles.actionIconWrapper} style={{ borderRadius: "10px", backgroundColor: "rgba(245, 158, 11, 0.08)", color: "var(--warning)" }}>
-              <FolderOpen size={16} />
+              <Archive size={16} />
             </div>
             <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Folders</span>
-              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>18</span>
-              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>12% of total files</span>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Archives</span>
+              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>{archivesCount}</span>
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>{totalFilesCount > 0 ? Math.round((archivesCount / totalFilesCount) * 100) : 0}% of files</span>
             </div>
           </div>
         </div>
@@ -1650,7 +2749,6 @@ export default function Home() {
               </thead>
               <tbody>
                 {filteredMyFiles.map((file) => {
-                  const { icon: IconComponent, className } = getFileIconComponent(file.type);
                   const isSelected = !!selectedMyFiles[file.id];
                   return (
                     <tr key={file.id} style={isSelected ? { backgroundColor: "rgba(94, 92, 230, 0.02)" } : {}}>
@@ -1663,9 +2761,7 @@ export default function Home() {
                       </td>
                       <td>
                         <div className={styles.fileCell}>
-                          <div className={`${styles.fileIconWrapper} ${className}`}>
-                            <IconComponent size={18} />
-                          </div>
+                          {renderFileThumbnail(file.name, file.type, (file as any).url, 18)}
                           <div className={styles.fileDetails}>
                             <span className={styles.fileName}>{file.name}</span>
                             {file.filesCount !== undefined && (
@@ -1691,7 +2787,13 @@ export default function Home() {
                         <div className={styles.actionsWrapper}>
                           {file.type !== "Folder" && (
                             <>
-                              <button className={styles.actionButton} title="View"><Eye size={14} /></button>
+                              <button 
+                                className={styles.actionButton} 
+                                title="View Preview" 
+                                onClick={() => handlePreviewFile(file.name, file.type, (file as any).url)}
+                              >
+                                <Eye size={14} />
+                              </button>
                               <button className={styles.actionButton} title="Download"><ArrowDown size={14} /></button>
                             </>
                           )}
@@ -1854,14 +2956,11 @@ export default function Home() {
               </thead>
               <tbody>
                 {filteredReceivedFiles.map((file) => {
-                  const { icon: IconComponent, className } = getFileIconComponent(file.type);
                   return (
                     <tr key={file.id}>
                       <td>
                         <div className={styles.fileCell}>
-                          <div className={`${styles.fileIconWrapper} ${className}`}>
-                            <IconComponent size={18} />
-                          </div>
+                          {renderFileThumbnail(file.fileName, file.type, (file as any).url, 18)}
                           <div className={styles.fileDetails}>
                             <span className={styles.fileName}>{file.fileName}</span>
                             <span className={styles.fileMeta}>Received from {file.device}</span>
@@ -1895,7 +2994,13 @@ export default function Home() {
                       </td>
                       <td>
                         <div className={styles.actionsWrapper}>
-                          <button className={styles.actionButton} title="View"><Eye size={14} /></button>
+                          <button 
+                            className={styles.actionButton} 
+                            title="View Preview"
+                            onClick={() => handlePreviewFile(file.fileName, file.type, (file as any).url)}
+                          >
+                            <Eye size={14} />
+                          </button>
                           <button
                             className={styles.actionButton}
                             title="Download"
@@ -1973,9 +3078,11 @@ export default function Home() {
       }
     });
 
-    // Filter based on Pill Category (All, In Progress, Completed, Failed)
+    // Filter based on Pill Category (All, Sent, Received, In Progress, Completed, Failed)
     const finalFiltered = subTabFiltered.filter(t => {
       if (transfersTab === "All Transfers" || transfersTab === "All") return true;
+      if (transfersTab === "Sent") return t.direction === "send";
+      if (transfersTab === "Received") return t.direction === "receive";
       if (transfersTab === "In Progress") return t.status === "Transferring" || t.status === "Paused" || (t.status as string) === "Pending";
       if (transfersTab === "Completed") return t.status === "Completed";
       if (transfersTab === "Failed") return t.status === "Failed";
@@ -2036,6 +3143,8 @@ export default function Home() {
         <div className={styles.transfersPillsRow}>
           {[
             { id: "All", label: "All" },
+            { id: "Sent", label: "Sent (Outbound)" },
+            { id: "Received", label: "Received (Inbound)" },
             ...(transfersSubTab === "Current" ? [{ id: "In Progress", label: "In Progress" }] : []),
             ...(transfersSubTab === "History" ? [{ id: "Completed", label: "Completed" }, { id: "Failed", label: "Failed" }] : [])
           ].map(pill => {
@@ -2057,25 +3166,60 @@ export default function Home() {
         {/* Transfers Cards List */}
         <div className={styles.transfersList}>
           {finalFiltered.map(item => {
-            const { icon: IconComponent, className } = getFileIconComponent(item.type);
             const isCompleted = item.status === "Completed";
             const isFailed = item.status === "Failed";
             const isPaused = item.status === "Paused";
 
             return (
-              <div key={item.id} className={styles.transferCard}>
-                {/* File Icon */}
-                <div className={`${styles.fileIconWrapper} ${className}`} style={{ width: "44px", height: "44px", borderRadius: "10px", flexShrink: 0 }}>
-                  <IconComponent size={20} />
-                </div>
+              <div key={item.id} className={styles.transferCard} style={{ gap: "16px" }}>
+                {/* File Thumbnail or Icon */}
+                {renderFileThumbnail(item.fileName, item.type, (item as any).url, 20, { width: "48px", height: "48px", borderRadius: "12px", flexShrink: 0 })}
 
                 {/* Details */}
                 <div className={styles.transferInfo}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span className={styles.transferName}>{item.fileName}</span>
-                    <span className={styles.transferDeviceMeta} style={{ fontWeight: 600 }}>{item.size}</span>
+                    <span className={styles.transferDeviceMeta} style={{ fontWeight: 600, fontSize: "13px" }}>{item.size}</span>
                   </div>
-                  <span className={styles.transferDeviceMeta}>{item.device} &bull; {item.ip}</span>
+
+                  {/* Sent vs Received Flow Indicator */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", margin: "4px 0" }}>
+                    <span 
+                      style={{ 
+                        display: "inline-flex", 
+                        alignItems: "center", 
+                        gap: "4px", 
+                        padding: "2px 8px", 
+                        borderRadius: "6px", 
+                        fontSize: "11px", 
+                        fontWeight: 700,
+                        backgroundColor: item.direction === "send" ? "rgba(16, 185, 129, 0.12)" : "rgba(59, 130, 246, 0.12)",
+                        color: item.direction === "send" ? "#10B981" : "#3B82F6",
+                        border: item.direction === "send" ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(59, 130, 246, 0.3)"
+                      }}
+                    >
+                      {item.direction === "send" ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+                      {item.direction === "send" ? "SENT" : "RECEIVED"}
+                    </span>
+
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)" }}>
+                      {item.direction === "send" ? (
+                        <>
+                          <span style={{ color: "var(--primary)" }}>You</span> &rarr; {item.device}
+                        </>
+                      ) : (
+                        <>
+                          {item.device} &rarr; <span style={{ color: "var(--primary)" }}>You</span>
+                        </>
+                      )}
+                    </span>
+
+                    <span className={styles.badge} style={{ fontSize: "10px", padding: "1px 6px", backgroundColor: "var(--primary-light)", color: "var(--primary)", borderRadius: "4px" }}>
+                      {item.type ? item.type.toUpperCase() : "FILE"}
+                    </span>
+
+                    <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>&bull; IP: {item.ip}</span>
+                  </div>
 
                   {/* Active Transfer Details */}
                   {!isCompleted && !isFailed && (
@@ -2109,6 +3253,14 @@ export default function Home() {
 
                 {/* Actions */}
                 <div className={styles.transferActions}>
+                  <button 
+                    className={styles.actionButton} 
+                    title="View Preview"
+                    onClick={() => handlePreviewFile(item.fileName, item.type, (item as any).url)}
+                  >
+                    <Eye size={14} />
+                  </button>
+
                   {!isCompleted && !isFailed && (
                     <>
                       <button 
@@ -2180,159 +3332,330 @@ export default function Home() {
     const hasActiveChat = activeChat !== "";
 
     return (
-      <div className={`${styles.chatContainer} ${hasActiveChat ? styles.chatContainerActive : ""} animate-fade-in`}>
+      <div className={`${styles.chatContainer} ${hasActiveChat ? styles.chatContainerActive : ""} animate-fade-in`} style={isGroupInfoModalOpen && hasActiveChat && typeof window !== "undefined" && window.innerWidth >= 992 ? { gridTemplateColumns: "320px 1fr 340px" } : {}}>
         {/* Left Sub-sidebar (Devices & Recent Chats) */}
         <div className={`${styles.chatSidebar} ${hasActiveChat ? styles.chatSidebarHiddenMobile : ""}`}>
           <div className={styles.chatSidebarHeader}>
             <span className={styles.chatSidebarTitle}>Nearby Devices</span>
-            <button
+            <motion.button
+              layout
+              type="button"
               className={styles.actionButton}
               title="Refresh Devices"
               onClick={() => handleRefreshDevices()}
               disabled={isScanning}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                width: isScanning ? "auto" : "32px",
+                height: "32px",
+                minWidth: isScanning ? "110px" : "32px",
+                padding: isScanning ? "0 10px" : "0",
+                borderRadius: "16px",
+                backgroundColor: isScanning ? "rgba(108, 99, 255, 0.15)" : "transparent",
+                border: isScanning ? "1px solid var(--primary)" : "1px solid var(--border-color)",
+                color: isScanning ? "var(--primary)" : "var(--text-secondary)",
+                overflow: "hidden",
+                cursor: "pointer"
+              }}
             >
-              <RefreshCw
-                size={14}
-                style={isScanning ? { animation: "spin 1s linear infinite" } : {}}
-              />
-            </button>
+              <motion.div
+                animate={isScanning ? { rotate: 360 } : { rotate: 0 }}
+                transition={isScanning ? { repeat: Infinity, duration: 0.8, ease: "linear" } : { duration: 0.3 }}
+                style={{ display: "flex", alignItems: "center" }}
+              >
+                <RefreshCw size={14} />
+              </motion.div>
+
+              <AnimatePresence>
+                {isScanning && (
+                  <motion.span
+                    initial={{ width: 0, opacity: 0, scale: 0.8 }}
+                    animate={{ width: "auto", opacity: 1, scale: 1 }}
+                    exit={{ width: 0, opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                      display: "inline-block",
+                      overflow: "hidden"
+                    }}
+                  >
+                    Refreshing...
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
           </div>
           
           <div className={styles.chatSidebarScroll}>
             {/* Nearby Devices Section */}
             <div className={styles.chatSidebarSection}>
-              {nearbyDevices.map((device, index) => (
-                <button
-                  key={`${device.name}-${device.ip}-${index}`}
-                  type="button"
-                  className={`${styles.chatDeviceItem} ${activeChat === device.name ? styles.chatDeviceActive : ""}`}
-                  onClick={() => setActiveChat(device.name)}
-                >
-                  <div className={styles.chatDeviceLeft}>
-                    <span className={`${styles.chatDeviceDot} ${device.status === "online" ? styles.chatDeviceOnline : styles.chatDeviceOffline}`} />
-                    <div className={styles.chatDeviceDetails}>
-                      <span className={styles.chatDeviceName}>{device.name}</span>
-                      <span className={styles.chatDeviceIp}>{device.ip}</span>
+              {nearbyDevices.map((device, index) => {
+                const initial = device.name ? device.name.charAt(0).toUpperCase() : "?";
+                const colors = ["#6C63FF", "#3B82F6", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6"];
+                const bgColor = colors[(device.name ? device.name.charCodeAt(0) : 0) % colors.length];
+                return (
+                  <button
+                    key={`${device.name}-${device.ip}-${index}`}
+                    type="button"
+                    className={`${styles.chatDeviceItem} ${activeChat === device.name ? styles.chatDeviceActive : ""}`}
+                    onClick={() => setActiveChat(device.name)}
+                  >
+                    <div className={styles.chatDeviceLeft} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div style={{ position: "relative", flexShrink: 0 }}>
+                        <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: bgColor, color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "15px", boxShadow: "0 2px 6px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+                          {((device.avatar && device.avatar !== "avatar_1") ? device.avatar : peerAvatars[device.name]) ? (
+                            <img src={(device.avatar && device.avatar !== "avatar_1") ? device.avatar : peerAvatars[device.name]} alt={device.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : (
+                            initial
+                          )}
+                        </div>
+                        <span 
+                          style={{
+                            position: "absolute",
+                            bottom: "0px",
+                            right: "0px",
+                            width: "10px",
+                            height: "10px",
+                            borderRadius: "50%",
+                            backgroundColor: device.status === "online" ? "#10B981" : "#9CA3AF",
+                            border: "2px solid var(--card-bg, #1e1b4b)",
+                            boxShadow: device.status === "online" ? "0 0 6px #10B981" : "none"
+                          }}
+                        />
+                      </div>
+                      <div className={styles.chatDeviceDetails}>
+                        <span className={styles.chatDeviceName}>{device.name}</span>
+                        <span className={styles.chatDeviceIp}>{device.ip}</span>
+                      </div>
                     </div>
-                  </div>
-                  {device.status === "offline" && (
-                    <span className={styles.chatDeviceRight}>Offline</span>
-                  )}
-                </button>
-              ))}
+                    {device.status === "offline" && (
+                      <span className={styles.chatDeviceRight}>Offline</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Recent Chats Section */}
-            <div className={styles.chatSidebarSection} style={{ marginTop: "12px" }}>
-              <span className={styles.chatSidebarSecTitle}>Recent Chats</span>
-              {recentChats.map((chat, index) => (
-                <button
-                  key={`${chat.name}-${index}`}
-                  type="button"
-                  className={`${styles.chatDeviceItem} ${activeChat === chat.name ? styles.chatDeviceActive : ""}`}
-                  onClick={() => setActiveChat(chat.name)}
-                >
-                  <div className={styles.chatDeviceLeft}>
-                    <MessageSquare size={16} className={styles.deviceCellIcon} />
-                    <div className={styles.chatDeviceDetails}>
-                      <span className={styles.chatDeviceName}>{chat.name}</span>
-                    </div>
-                  </div>
-                  <span className={styles.chatDeviceRight}>{chat.time}</span>
-                </button>
-              ))}
-              {recentChats.length === 0 && (
-                <div style={{ padding: "12px", fontSize: "12px", color: "var(--text-secondary)", textAlign: "center" }}>
-                  No recent chats
-                </div>
-              )}
-            </div>
           </div>
-
-          <button className={styles.startNewChatBtn}>
-            <Plus size={16} />
-            <span>Start New Chat</span>
-          </button>
         </div>
 
         {/* Right Chat Panel */}
-        <div className={`${styles.chatPanel} ${!hasActiveChat ? styles.chatPanelHiddenMobile : ""}`}>
+        <div 
+          className={`${styles.chatPanel} ${!hasActiveChat ? styles.chatPanelHiddenMobile : ""}`}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onPaste={handlePaste}
+          style={{ position: "relative" }}
+        >
+          {hasActiveChat && isDraggingFile && (
+            <div style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 999,
+              backgroundColor: "rgba(108, 99, 255, 0.15)",
+              backdropFilter: "blur(10px)",
+              border: "3px dashed var(--primary)",
+              borderRadius: "20px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "16px",
+              color: "var(--primary)",
+              pointerEvents: "none"
+            }}>
+              <div style={{ padding: "24px", borderRadius: "50%", backgroundColor: "rgba(108, 99, 255, 0.25)" }}>
+                <UploadCloud size={56} />
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <h3 style={{ fontSize: "22px", fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>Drop files here to send</h3>
+                <p style={{ fontSize: "14px", color: "var(--text-muted)", margin: "8px 0 0 0" }}>Photos, videos, documents & zip files will be sent instantly to {activeChat}</p>
+              </div>
+            </div>
+          )}
 
           {hasActiveChat ? (
             <>
               {/* Header */}
-              <div className={styles.chatPanelHeader}>
-                <div className={styles.chatPanelHeaderLeft}>
-                  {/* Mobile Back Button */}
-                  <button 
-                    onClick={() => setActiveChat("")} 
-                    className={styles.mobileBackBtn}
-                    title="Back to Device list"
-                  >
-                    <ArrowLeft size={18} />
-                  </button>
-                  <div className={styles.chatPanelAvatar}>
-                    <Laptop size={18} />
+              {selectedMessageIds.length > 0 ? (
+                <div className={styles.chatPanelHeader} style={{ backgroundColor: "rgba(108, 99, 255, 0.15)", borderBottom: "1px solid var(--primary)", zIndex: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <button type="button" onClick={() => setSelectedMessageIds([])} style={{ background: "none", border: "none", color: "var(--text-primary)", cursor: "pointer" }}>
+                      <X size={18} />
+                    </button>
+                    <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>{selectedMessageIds.length} Selected</span>
                   </div>
-              <div className={styles.chatPanelInfo}>
-                <span className={styles.chatPanelName}>{activeChat}</span>
-                <span className={styles.chatPanelStatus}>
-                  {typingUsers.includes(activeChat) ? (
-                    <span style={{ color: "var(--primary)", fontWeight: "600" }}>typing...</span>
-                  ) : (
-                    <>
-                      <span className={`${styles.chatPanelStatusDot} ${activeDeviceObj.status === "offline" ? styles.chatDeviceOffline : ""}`} />
-                      {activeDeviceObj.status === "offline" ? "Offline" : "Online"}
-                    </>
-                  )}
-                </span>
-              </div>
-            </div>
-            <div className={styles.chatPanelHeaderRight}>
-              <button className={styles.controlButton} title="Search"><Search size={16} /></button>
-              <button className={styles.controlButton} title="More"><MoreVertical size={16} /></button>
-            </div>
-          </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                    <button
+                      type="button"
+                      title="Forward Selected"
+                      onClick={() => {
+                        setLightboxData({
+                          url: "",
+                          fileName: `${selectedMessageIds.length} selected messages`,
+                          chatName: activeChat
+                        });
+                        setIsShareModalOpen(true);
+                      }}
+                      style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "13px", fontWeight: 600 }}
+                    >
+                      <Share2 size={16} />
+                      <span>Forward</span>
+                    </button>
+                    <button
+                      type="button"
+                      title="Delete Selected"
+                      onClick={() => handleDeleteMultipleMessages(selectedMessageIds, activeChat)}
+                      style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "13px", fontWeight: 600 }}
+                    >
+                      <Trash2 size={16} />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className={styles.chatPanelHeader}>
+                  <div className={styles.chatPanelHeaderLeft}>
+                    {/* Mobile Back Button */}
+                    <button 
+                      onClick={() => setActiveChat("")} 
+                      className={styles.mobileBackBtn}
+                      title="Back to Device list"
+                    >
+                      <ArrowLeft size={18} />
+                    </button>
+                    {(() => {
+                      const initial = activeChat ? activeChat.charAt(0).toUpperCase() : "?";
+                      const colors = ["#6C63FF", "#3B82F6", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6"];
+                      const bgColor = colors[(activeChat ? activeChat.charCodeAt(0) : 0) % colors.length];
+                      const peerImg = peerAvatars[activeChat];
+                      return (
+                        <div style={{ width: "38px", height: "38px", borderRadius: "50%", backgroundColor: bgColor, color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "16px", flexShrink: 0, boxShadow: "0 2px 8px rgba(108, 99, 255, 0.3)", marginRight: "4px", overflow: "hidden" }}>
+                          {peerImg && peerImg !== "avatar_1" ? (
+                            <img src={peerImg} alt={activeChat} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : (
+                            initial
+                          )}
+                        </div>
+                      );
+                    })()}
+                    <div 
+                      className={styles.chatPanelInfo} 
+                      onClick={() => {
+                        if (activeChat === "Group Chat" || activeChat === "Project-Group") {
+                          setIsGroupInfoModalOpen(true);
+                        } else {
+                          setIsChatWallpaperModalOpen(true);
+                        }
+                      }} 
+                      style={{ cursor: "pointer" }} 
+                      title={activeChat === "Group Chat" || activeChat === "Project-Group" ? "Click for Group Info" : "Click for Wallpaper & Info"}
+                    >
+                      <span className={styles.chatPanelName}>{activeChat}</span>
+                      <span className={styles.chatPanelStatus}>
+                        {typingUsers.includes(activeChat) ? (
+                          <span style={{ color: "var(--primary)", fontWeight: "600" }}>typing...</span>
+                        ) : activeChat === "Group Chat" || activeChat === "Project-Group" ? (
+                          <span style={{ color: "var(--primary)", fontWeight: "600" }}>{nearbyDevices.length + 1} Participants • Tap for info</span>
+                        ) : (
+                          <>
+                            <span className={`${styles.chatPanelStatusDot} ${activeDeviceObj.status === "offline" ? styles.chatDeviceOffline : ""}`} />
+                            {activeDeviceObj.status === "offline" ? "Offline" : "Online"}
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={styles.chatPanelHeaderRight}>
+                    <button className={styles.controlButton} title="Search"><Search size={16} /></button>
+                    <button 
+                      className={styles.controlButton} 
+                      title="Group Info / Wallpaper" 
+                      onClick={() => {
+                        if (activeChat === "Group Chat" || activeChat === "Project-Group") {
+                          setIsGroupInfoModalOpen(true);
+                        } else {
+                          setIsChatWallpaperModalOpen(true);
+                        }
+                      }}
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
 
           {/* Chat Messages Body Container with Fixed Background Stars */}
           <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column" }}>
             <StarParticlesCanvas 
               enabled={settingsStarEnabled} 
-              intensity={settingsStarIntensity} 
-              speed={settingsStarSpeed} 
-              isDark={settingsDarkMode} 
+              customWallpaperUrl={chatWallpapers[activeChat] || chatWallpapers["global"]} 
             />
             
-            <div className={styles.chatPanelBody} style={{ flex: 1, overflowY: "auto", position: "relative", zIndex: 1 }}>
+            <div ref={chatBodyRef} className={styles.chatPanelBody} style={{ flex: 1, overflowY: "auto", position: "relative", zIndex: 1 }}>
               <span className={styles.chatDaySeparator}>Today</span>
 
-              {activeMessages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`${styles.chatBubble} ${
-                    msg.sender === "you" ? styles.chatBubbleOutgoing : styles.chatBubbleIncoming
-                  }`}
-                  style={{ position: "relative", cursor: "context-menu" }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setContextMenuData({ x: e.clientX, y: e.clientY, msg, chatName: activeChat });
-                  }}
-                  onTouchStart={(e) => {
-                    const touch = e.touches[0];
-                    const x = touch.clientX;
-                    const y = touch.clientY;
-                    touchTimerRef.current = setTimeout(() => {
-                      setContextMenuData({ x, y, msg, chatName: activeChat });
-                    }, 500);
-                  }}
-                  onTouchEnd={() => {
-                    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-                  }}
-                  onTouchMove={() => {
-                    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-                  }}
-                >
+              {activeMessages.map((msg) => {
+                const isSelected = selectedMessageIds.includes(msg.id);
+                return (
+                  <div
+                    key={msg.id}
+                    className={`${styles.chatBubble} ${
+                      msg.sender === "you" ? styles.chatBubbleOutgoing : styles.chatBubbleIncoming
+                    }`}
+                    style={{
+                      position: "relative",
+                      cursor: "pointer",
+                      border: isSelected ? "2px solid var(--primary)" : "none",
+                      boxShadow: isSelected ? "0 0 12px rgba(108, 99, 255, 0.4)" : "none"
+                    }}
+                    onClick={() => {
+                      if (selectedMessageIds.length > 0) {
+                        setSelectedMessageIds(prev =>
+                          prev.includes(msg.id) ? prev.filter(id => id !== msg.id) : [...prev, msg.id]
+                        );
+                      }
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenuData({ x: e.clientX, y: e.clientY, msg, chatName: activeChat });
+                    }}
+                    onTouchStart={(e) => {
+                      const touch = e.touches[0];
+                      const x = touch.clientX;
+                      const y = touch.clientY;
+                      touchTimerRef.current = setTimeout(() => {
+                        setContextMenuData({ x, y, msg, chatName: activeChat });
+                      }, 500);
+                    }}
+                    onTouchEnd={() => {
+                      if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+                    }}
+                    onTouchMove={() => {
+                      if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+                    }}
+                  >
+
+                  {msg.reply_to_text && (
+                    <div style={{ padding: "6px 10px", backgroundColor: "rgba(0, 0, 0, 0.2)", borderLeft: "3px solid var(--primary)", borderRadius: "6px", marginBottom: "6px", fontSize: "12px" }}>
+                      <span style={{ fontWeight: 600, color: "var(--primary)", display: "block", fontSize: "11px" }}>{msg.reply_to_sender || "Reply"}</span>
+                      <span style={{ opacity: 0.9, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", display: "block" }}>{msg.reply_to_text}</span>
+                    </div>
+                  )}
+
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+
                     {msg.text && <span style={{ flex: 1 }}>{msg.text}</span>}
                     
                     {/* Action Bar for Message Bubbles */}
@@ -2488,7 +3811,9 @@ export default function Home() {
                     {msg.time} {msg.sender === "you" && " ✓✓"}
                   </span>
                 </div>
-              ))}
+              );
+            })}
+
 
               {/* Scroll Anchor */}
               <div ref={messagesEndRef} />
@@ -2603,6 +3928,17 @@ export default function Home() {
                       </div>
                       <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)" }}>All Files</span>
                     </button>
+
+                    <button 
+                      type="button"
+                      onClick={() => { setIsAttachMenuOpen(false); handleClipboardRead(); }}
+                      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", cursor: "pointer" }}
+                    >
+                      <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#FF9800", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Clipboard size={20} />
+                      </div>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)" }}>Clipboard</span>
+                    </button>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -2629,6 +3965,7 @@ export default function Home() {
                 className={styles.chatInputField}
                 value={messageInput}
                 onChange={handleInputChange}
+                onPaste={handlePaste}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSendMessage();
                 }}
@@ -2646,10 +3983,450 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* WhatsApp Web Style Right Group Info Sidebar Panel */}
+        {isGroupInfoModalOpen && hasActiveChat && (
+          <div 
+            className="animate-fade-in"
+            style={{
+              backgroundColor: "var(--bg-card)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "var(--border-radius-lg)",
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
+              overflowY: "auto",
+              boxShadow: "var(--box-shadow-sm)",
+              position: typeof window !== "undefined" && window.innerWidth < 992 ? "fixed" : "relative",
+              top: typeof window !== "undefined" && window.innerWidth < 992 ? 0 : "auto",
+              right: typeof window !== "undefined" && window.innerWidth < 992 ? 0 : "auto",
+              bottom: typeof window !== "undefined" && window.innerWidth < 992 ? 0 : "auto",
+              left: typeof window !== "undefined" && window.innerWidth < 992 ? 0 : "auto",
+              zIndex: typeof window !== "undefined" && window.innerWidth < 992 ? 99999 : 1,
+              width: typeof window !== "undefined" && window.innerWidth < 992 ? "100vw" : "auto"
+            }}
+          >
+            {/* Panel Header */}
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-color)", display: "flex", alignItems: "center", gap: "16px", backgroundColor: "var(--bg-card)" }}>
+              <button 
+                type="button" 
+                onClick={() => setIsGroupInfoModalOpen(false)}
+                style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", display: "flex", alignItems: "center" }}
+              >
+                <X size={20} />
+              </button>
+              <span style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)" }}>Group info</span>
+            </div>
+
+            {/* Avatar & Title Banner */}
+            <div style={{ padding: "28px 20px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", borderBottom: "1px solid var(--border-color)", backgroundColor: "rgba(0,0,0,0.02)" }}>
+              <div style={{ width: "100px", height: "100px", borderRadius: "50%", backgroundColor: "var(--primary)", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "14px", boxShadow: "0 8px 24px rgba(108, 99, 255, 0.3)", fontSize: "36px", fontWeight: 700 }}>
+                <Users size={48} />
+              </div>
+              <h2 style={{ fontSize: "19px", fontWeight: 700, color: "var(--text-primary)", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+                {activeChat || "Group Chat"}
+                <Edit3 size={14} style={{ color: "var(--text-secondary)", cursor: "pointer" }} />
+              </h2>
+              <span style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                Group &bull; {nearbyDevices.length + 1} members
+              </span>
+
+              {/* Quick Action Buttons */}
+              <div style={{ display: "flex", gap: "24px", marginTop: "18px" }}>
+                <button type="button" onClick={() => handleRefreshDevices()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>
+                  <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "var(--primary-light)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Plus size={20} />
+                  </div>
+                  <span>Add</span>
+                </button>
+                <button type="button" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>
+                  <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "var(--primary-light)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Search size={20} />
+                  </div>
+                  <span>Search</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Group Description */}
+            <div style={{ padding: "14px 20px", borderBottom: "8px solid rgba(0,0,0,0.05)" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, display: "block", marginBottom: "4px" }}>Add group description</span>
+              <p style={{ fontSize: "13px", color: "var(--text-primary)", margin: 0, lineHeight: 1.4 }}>
+                Default LAN Broadcast & File Sharing Group. Share images, docs, and communicate offline.
+              </p>
+            </div>
+
+            {/* Media, Starred, Settings List Items */}
+            <div style={{ borderBottom: "8px solid rgba(0,0,0,0.05)" }}>
+              <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", borderBottom: "1px solid var(--border-color)" }} onClick={() => setActivePage("My Files")}>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                  <FolderOpen size={18} style={{ color: "var(--text-secondary)" }} />
+                  <span style={{ fontSize: "14px", color: "var(--text-primary)" }}>Media, links and docs</span>
+                </div>
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{myFiles.length} &rsaquo;</span>
+              </div>
+              <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", borderBottom: "1px solid var(--border-color)" }} onClick={() => setActivePage("Favorites")}>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                  <Star size={18} style={{ color: "var(--text-secondary)" }} />
+                  <span style={{ fontSize: "14px", color: "var(--text-primary)" }}>Starred messages</span>
+                </div>
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{starredMessageIds.length} &rsaquo;</span>
+              </div>
+              <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }} onClick={() => setIsChatWallpaperModalOpen(true)}>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                  <ImageIcon size={18} style={{ color: "var(--text-secondary)" }} />
+                  <span style={{ fontSize: "14px", color: "var(--text-primary)" }}>Chat Wallpaper</span>
+                </div>
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>&rsaquo;</span>
+              </div>
+            </div>
+
+            {/* Participants List */}
+            <div style={{ flex: 1, padding: "16px 20px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                  {nearbyDevices.length + 1} members
+                </span>
+                <Search size={16} style={{ color: "var(--text-secondary)", cursor: "pointer" }} />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {/* Current User ("You") */}
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "8px 10px", borderRadius: "10px", backgroundColor: "rgba(108, 99, 255, 0.05)" }}>
+                  <div style={{ position: "relative", width: "40px", height: "40px", borderRadius: "50%", overflow: "hidden", backgroundColor: "var(--primary)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", fontWeight: 700 }}>
+                    {userCustomAvatar ? (
+                      <img src={userCustomAvatar} alt="You" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      username ? username.charAt(0).toUpperCase() : "Y"
+                    )}
+                  </div>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>{username || "You"}</span>
+                      <span style={{ fontSize: "10px", fontWeight: 700, backgroundColor: "var(--primary)", color: "#ffffff", padding: "1px 5px", borderRadius: "4px" }}>You</span>
+                    </div>
+                    <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>{deviceName} &bull; Local Host</span>
+                  </div>
+                  <span style={{ fontSize: "10px", fontWeight: 700, backgroundColor: "rgba(16, 185, 129, 0.15)", color: "var(--success)", padding: "2px 6px", borderRadius: "4px" }}>Group admin</span>
+                </div>
+
+                {/* Other Devices */}
+                {nearbyDevices.map((device, idx) => {
+                  const initial = device.name ? device.name.charAt(0).toUpperCase() : "?";
+                  const colors = ["#6C63FF", "#3B82F6", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6"];
+                  const bgColor = colors[(device.name ? device.name.charCodeAt(0) : 0) % colors.length];
+                  const peerImg = peerAvatars[device.name] || device.avatar;
+                  
+                  return (
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "8px 10px", borderRadius: "10px" }}>
+                      <div style={{ position: "relative", width: "40px", height: "40px", borderRadius: "50%", overflow: "hidden", backgroundColor: bgColor, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", fontWeight: 700 }}>
+                        {peerImg && peerImg !== "avatar_1" ? (
+                          <img src={peerImg} alt={device.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          initial
+                        )}
+                      </div>
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>{device.name}</span>
+                        <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>IP: {device.ip}</span>
+                      </div>
+                      {idx === 0 && (
+                        <span style={{ fontSize: "10px", fontWeight: 700, backgroundColor: "rgba(16, 185, 129, 0.15)", color: "var(--success)", padding: "2px 6px", borderRadius: "4px" }}>Group admin</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
 
+
+  // ----------------------------------------------------
+  // RENDER VIEW: Favorites UI
+  // ----------------------------------------------------
+  const renderFavorites = () => {
+    // Collect starred chat messages & attachments
+    const starredChatItems: Array<{
+      id: string;
+      title: string;
+      subtitle: string;
+      time: string;
+      fileUrl?: string;
+      fileName?: string;
+      fileSize?: string;
+      category: "Images" | "Documents" | "Videos" | "Audio" | "Messages" | "Files";
+      rawMsg?: ChatMessage;
+    }> = [];
+
+    Object.entries(chatMessages).forEach(([chatName, msgs]) => {
+      msgs.forEach((m) => {
+        if (starredMessageIds.includes(m.id)) {
+          let cat: "Images" | "Documents" | "Videos" | "Audio" | "Messages" | "Files" = "Messages";
+          let fUrl = m.file;
+          if (fUrl && !fUrl.startsWith("http")) {
+            const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
+            fUrl = `http://${hostname}:8000${fUrl}`;
+          }
+
+          if (m.file) {
+            const ext = (m.file_name || "").split('.').pop()?.toLowerCase() || "";
+            const ft = (m.file_type || "").toLowerCase();
+            if (ft.startsWith("image/") || ["jpg", "jpeg", "png", "webp", "gif", "svg"].includes(ext)) {
+              cat = "Images";
+            } else if (ft.startsWith("video/") || ["mp4", "mov", "m4v", "avi", "mkv"].includes(ext)) {
+              cat = "Videos";
+            } else if (ft.startsWith("audio/") || ["mp3", "wav", "ogg", "m4a"].includes(ext)) {
+              cat = "Audio";
+            } else if (["pdf", "doc", "docx", "txt", "ppt", "pptx", "xls", "xlsx"].includes(ext)) {
+              cat = "Documents";
+            } else {
+              cat = "Files";
+            }
+          }
+
+          starredChatItems.push({
+            id: m.id,
+            title: m.file_name ? m.file_name : (m.text || "Starred Message"),
+            subtitle: `Chat with ${chatName} • ${m.sender === "you" ? "Sent by You" : "Received"}`,
+            time: m.time,
+            fileUrl: fUrl,
+            fileName: m.file_name,
+            fileSize: m.file_size ? formatBytes(m.file_size) : undefined,
+            category: cat,
+            rawMsg: m
+          });
+        }
+      });
+    });
+
+    const displayItems = starredChatItems;
+
+    // Filter by search query
+    const searchedItems = displayItems.filter(item => {
+      const q = favoritesSearch.toLowerCase();
+      return item.title.toLowerCase().includes(q) || item.subtitle.toLowerCase().includes(q);
+    });
+
+    // Filter by active pill category tab
+    const filteredItems = searchedItems.filter(item => {
+      if (favoritesTab === "All") return true;
+      return item.category === favoritesTab;
+    });
+
+    const totalCount = displayItems.length;
+    const imagesCount = displayItems.filter(i => i.category === "Images").length;
+    const docsCount = displayItems.filter(i => i.category === "Documents").length;
+    const msgsCount = displayItems.filter(i => i.category === "Messages").length;
+
+    return (
+      <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px", width: "100%" }}>
+        {/* Header Section */}
+        <div className={styles.pageHeader}>
+          <div className={styles.titleArea}>
+            <h1>Favorites</h1>
+            <span className={styles.subtitle}>Quick access to your starred files, attachments, and important messages.</span>
+          </div>
+          
+          <div className={styles.headerControls}>
+            <div className={styles.subSearchWrapper}>
+              <Search className={styles.subSearchIcon} />
+              <input
+                type="text"
+                className={styles.subSearchInput}
+                placeholder="Search favorites..."
+                value={favoritesSearch}
+                onChange={(e) => setFavoritesSearch(e.target.value)}
+              />
+            </div>
+            <button className={styles.controlButton} title="Options">
+              <MoreHorizontal size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Stats Row */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "20px" }}>
+          <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "16px 20px", cursor: "default" }}>
+            <div className={styles.actionIconWrapper} style={{ borderRadius: "10px", backgroundColor: "rgba(245, 158, 11, 0.12)", color: "#F59E0B" }}>
+              <Star size={18} style={{ fill: "#F59E0B" }} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Starred Items</span>
+              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>{totalCount}</span>
+              <span style={{ fontSize: "11px", color: "var(--success)", fontWeight: 600 }}>Bookmarked</span>
+            </div>
+          </div>
+
+          <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "16px 20px", cursor: "default" }}>
+            <div className={styles.actionIconWrapper} style={{ borderRadius: "10px", backgroundColor: "rgba(16, 185, 129, 0.08)", color: "var(--success)" }}>
+              <ImageIcon size={18} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Starred Images</span>
+              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>{imagesCount}</span>
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Photos & Art</span>
+            </div>
+          </div>
+
+          <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "16px 20px", cursor: "default" }}>
+            <div className={styles.actionIconWrapper} style={{ borderRadius: "10px", backgroundColor: "rgba(59, 130, 246, 0.08)", color: "var(--info)" }}>
+              <FileText size={18} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Starred Documents</span>
+              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>{docsCount}</span>
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Files & PDFs</span>
+            </div>
+          </div>
+
+          <div className={styles.quickActionCard} style={{ flexDirection: "row", justifyContent: "flex-start", padding: "16px 20px", cursor: "default" }}>
+            <div className={styles.actionIconWrapper} style={{ borderRadius: "10px", backgroundColor: "rgba(139, 92, 246, 0.08)", color: "#8B5CF6" }}>
+              <MessageSquare size={18} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", textAlign: "left", gap: "2px" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Messages</span>
+              <span style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-family-outfit)" }}>{msgsCount}</span>
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Saved chats</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Pill Category Tabs */}
+        <div className={styles.pillTabsContainer}>
+          {["All", "Images", "Documents", "Videos", "Audio", "Messages"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setFavoritesTab(tab)}
+              className={`${styles.pillTab} ${favoritesTab === tab ? styles.activePillTab : ""}`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {/* Favorites Content List Grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "20px" }}>
+          {filteredItems.map((item) => (
+            <div 
+              key={item.id}
+              className={styles.quickActionCard}
+              style={{
+                flexDirection: "column",
+                alignItems: "stretch",
+                padding: "16px",
+                position: "relative",
+                cursor: "default",
+                backgroundColor: "var(--bg-card)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "var(--border-radius-lg)",
+                boxShadow: "0 4px 14px rgba(0,0,0,0.05)"
+              }}
+            >
+              {/* Unstar / Remove Button */}
+              <button
+                type="button"
+                onClick={() => toggleStarMessage(item.id)}
+                title="Unstar / Remove from Favorites"
+                style={{
+                  position: "absolute",
+                  top: "12px",
+                  right: "12px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#F59E0B",
+                  padding: "4px",
+                  zIndex: 2
+                }}
+              >
+                <Star size={18} style={{ fill: "#F59E0B" }} />
+              </button>
+
+              {/* Media Preview or Icon Header */}
+              {item.category === "Images" && item.fileUrl ? (
+                <div 
+                  style={{ width: "100%", height: "160px", borderRadius: "12px", overflow: "hidden", marginBottom: "12px", position: "relative", cursor: "pointer", backgroundColor: "rgba(0,0,0,0.2)" }}
+                  onClick={() => handlePreviewFile(item.fileName || "image.png", item.category, item.fileUrl)}
+                >
+                  <img src={item.fileUrl} alt={item.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <div style={{ position: "absolute", bottom: "8px", right: "8px", backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", color: "#fff", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}>
+                    <Eye size={12} /> Preview
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+                  <div className={styles.actionIconWrapper} style={{ borderRadius: "10px", width: "40px", height: "40px", flexShrink: 0 }}>
+                    {item.category === "Messages" ? <MessageSquare size={20} /> : <FileText size={20} />}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                    <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{item.title}</span>
+                    <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>{item.fileSize || item.category}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Title / Description for images or text messages */}
+              {item.category === "Images" && (
+                <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "4px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                  {item.title}
+                </span>
+              )}
+              {item.category === "Messages" && item.rawMsg?.text && (
+                <p style={{ fontSize: "13px", color: "var(--text-primary)", margin: "0 0 12px 0", backgroundColor: "rgba(255,255,255,0.03)", padding: "10px", borderRadius: "8px", borderLeft: "3px solid var(--primary)" }}>
+                  "{item.rawMsg.text}"
+                </p>
+              )}
+
+              {/* Card Footer Meta & Action Buttons */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto", paddingTop: "8px", borderTop: "1px solid var(--border-color)" }}>
+                <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>{item.subtitle}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  {item.fileUrl && (
+                    <a 
+                      href={item.fileUrl} 
+                      download={item.fileName || "file"} 
+                      className={styles.actionButton}
+                      title="Download File"
+                      style={{ display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}
+                    >
+                      <ArrowDown size={14} />
+                    </a>
+                  )}
+                  {item.category === "Images" && item.fileUrl && (
+                    <button 
+                      type="button" 
+                      className={styles.actionButton}
+                      title="View Image"
+                      onClick={() => handlePreviewFile(item.fileName || "image.png", item.category, item.fileUrl)}
+                    >
+                      <Eye size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Empty State */}
+        {filteredItems.length === 0 && (
+          <div style={{ padding: "64px 24px", textAlign: "center", backgroundColor: "var(--bg-card)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+            <div style={{ width: "64px", height: "64px", borderRadius: "50%", backgroundColor: "rgba(245, 158, 11, 0.1)", color: "#F59E0B", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Star size={32} style={{ fill: "#F59E0B" }} />
+            </div>
+            <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>No Favorites Found</h3>
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", maxWidth: "400px", margin: 0 }}>
+              {favoritesSearch ? "No starred items match your search filter." : "You haven't starred any files or messages yet. Right-click or click the star icon ⭐ on any attachment in chat or file list to save it here for quick access!"}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ----------------------------------------------------
   // RENDER VIEW: Placeholder Screen (Chats, Sent, Favorites, Devices, Settings)
@@ -2974,184 +4751,7 @@ export default function Home() {
     );
   };
 
-  // ----------------------------------------------------
-  // RENDER VIEW: Favorites UI (ui 11.png and ui 12.png)
-  // ----------------------------------------------------
-  const renderFavorites = () => {
-    // Premium mock favorites lists
-    const favDevices = [
-      { name: "Artemis-PC", ip: "192.168.1.2", type: "Windows", lastSeen: "Just now", status: "Online" },
-      { name: "Android-Phone", ip: "192.168.1.8", type: "Android", lastSeen: "2 min ago", status: "Online" }
-    ];
 
-    const favFiles = [
-      { name: "Final_Project.zip", type: "ZIP", size: "25.6 MB", date: "Today 10:31 AM" },
-      { name: "Presentation.pptx", type: "PPTX", size: "18.7 MB", date: "Yesterday 5:45 PM" }
-    ];
-
-    const favChats = [
-      { name: "Lab-PC-03", lastMsg: "See you tomorrow!", time: "10:28 AM", unread: 2 },
-      { name: "iPhone-14", lastMsg: "File received, thanks!", time: "Yesterday", unread: 0 }
-    ];
-
-    // Filter by search query
-    const filteredDevices = favDevices.filter(d => 
-      d.name.toLowerCase().includes(favoritesSearch.toLowerCase()) || 
-      d.ip.toLowerCase().includes(favoritesSearch.toLowerCase())
-    );
-
-    const filteredFiles = favFiles.filter(f => 
-      f.name.toLowerCase().includes(favoritesSearch.toLowerCase())
-    );
-
-    const filteredChats = favChats.filter(c => 
-      c.name.toLowerCase().includes(favoritesSearch.toLowerCase()) || 
-      c.lastMsg.toLowerCase().includes(favoritesSearch.toLowerCase())
-    );
-
-    const showAll = favoritesTab === "All";
-    const showDevices = favoritesTab === "Devices" || showAll;
-    const showFiles = favoritesTab === "Files" || showAll;
-    const showChats = favoritesTab === "Chats" || showAll;
-
-    return (
-      <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-        {/* Header Section */}
-        <div className={styles.pageHeader}>
-          <div className={styles.titleArea}>
-            <h1 style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <Star size={24} style={{ fill: "var(--primary)", color: "var(--primary)" }} />
-              Favorites
-            </h1>
-            <span className={styles.subtitle}>Quick access to your preferred devices, files, and chats.</span>
-          </div>
-
-          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", width: "100%", justifyContent: "space-between" }}>
-            <div className={styles.transfersSubTabs} style={{ margin: 0 }}>
-              {["All", "Devices", "Files", "Chats"].map(tab => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setFavoritesTab(tab)}
-                  className={`${styles.transfersTabBtn} ${favoritesTab === tab ? styles.transfersTabBtnActive : ""}`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-
-            <div className={styles.transfersSearchWrapper} style={{ maxWidth: "320px", width: "100%" }}>
-              <Search size={16} className={styles.transfersSearchIcon} />
-              <input
-                type="text"
-                placeholder="Search favorites..."
-                className={styles.transfersSearchInput}
-                value={favoritesSearch}
-                onChange={(e) => setFavoritesSearch(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Favourites Grid */}
-        <div className={styles.favoritesGrid}>
-          {/* Favourites Devices */}
-          {showDevices && (
-            <div className={styles.favoritesColumn}>
-              <div className={styles.favoritesSectionHeader}>
-                <Monitor size={18} style={{ color: "var(--primary)" }} />
-                <span className={styles.favoritesSectionTitle}>Favourite Devices ({filteredDevices.length})</span>
-              </div>
-              {filteredDevices.map((d, i) => (
-                <div key={i} className={styles.favoriteItemCard} onClick={() => {
-                  setActivePage("Chats");
-                  setActiveChat(d.name);
-                }} style={{ cursor: "pointer" }}>
-                  <div className={styles.settingsAvatarWrapper} style={{ width: "40px", height: "40px", fontSize: "14px" }}>
-                    {d.name.charAt(0)}
-                  </div>
-                  <div className={styles.favoriteItemInfo}>
-                    <span className={styles.favoriteItemTitle}>{d.name}</span>
-                    <span className={styles.favoriteItemSubtitle}>{d.ip} &bull; {d.status}</span>
-                  </div>
-                  <div className={styles.favoriteBadge}>{d.type}</div>
-                </div>
-              ))}
-              {filteredDevices.length === 0 && (
-                <div style={{ padding: "16px", textAlign: "center", color: "var(--text-secondary)", fontSize: "12px" }}>
-                  No favourite devices found.
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Favourites Files */}
-          {showFiles && (
-            <div className={styles.favoritesColumn}>
-              <div className={styles.favoritesSectionHeader}>
-                <FileText size={18} style={{ color: "var(--primary)" }} />
-                <span className={styles.favoritesSectionTitle}>Favourite Files ({filteredFiles.length})</span>
-              </div>
-              {filteredFiles.map((f, i) => (
-                <div key={i} className={styles.favoriteItemCard}>
-                  <div className={styles.fileIconContainer} style={{ width: "36px", height: "36px" }}>
-                    <FolderArchive size={16} />
-                  </div>
-                  <div className={styles.favoriteItemInfo}>
-                    <span className={styles.favoriteItemTitle}>{f.name}</span>
-                    <span className={styles.favoriteItemSubtitle}>{f.size} &bull; {f.date}</span>
-                  </div>
-                  <div className={styles.favoriteBadge}>{f.type}</div>
-                </div>
-              ))}
-              {filteredFiles.length === 0 && (
-                <div style={{ padding: "16px", textAlign: "center", color: "var(--text-secondary)", fontSize: "12px" }}>
-                  No favourite files found.
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Favourites Chats */}
-          {showChats && (
-            <div className={styles.favoritesColumn}>
-              <div className={styles.favoritesSectionHeader}>
-                <MessageSquare size={18} style={{ color: "var(--primary)" }} />
-                <span className={styles.favoritesSectionTitle}>Favourite Chats ({filteredChats.length})</span>
-              </div>
-              {filteredChats.map((c, i) => (
-                <div key={i} className={styles.favoriteItemCard} onClick={() => {
-                  setActivePage("Chats");
-                  setActiveChat(c.name);
-                }} style={{ cursor: "pointer" }}>
-                  <div className={styles.settingsAvatarWrapper} style={{ width: "40px", height: "40px", fontSize: "14px", backgroundColor: "rgba(59, 130, 246, 0.1)", color: "var(--info)", borderColor: "var(--info)" }}>
-                    {c.name.charAt(0)}
-                  </div>
-                  <div className={styles.favoriteItemInfo}>
-                    <span className={styles.favoriteItemTitle}>{c.name}</span>
-                    <span className={styles.favoriteItemSubtitle} style={{ fontWeight: c.unread > 0 ? "600" : "400" }}>{c.lastMsg}</span>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-                    <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>{c.time}</span>
-                    {c.unread > 0 && (
-                      <div className={styles.chatActiveTransfersBarFill} style={{ width: "16px", height: "16px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", color: "white", fontWeight: "700" }}>
-                        {c.unread}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {filteredChats.length === 0 && (
-                <div style={{ padding: "16px", textAlign: "center", color: "var(--text-secondary)", fontSize: "12px" }}>
-                  No favourite chats found.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   // ----------------------------------------------------
   // RENDER VIEW: Settings UI (ui 9.png)
@@ -3420,6 +5020,164 @@ export default function Home() {
     );
   };
 
+  // ----------------------------------------------------
+  // RENDER VIEW: Screen Share & Live Broadcast Dashboard
+  // ----------------------------------------------------
+  const renderScreenShare = () => {
+    const isLiveActive = activeScreenPresenter?.active;
+    const isMobileDevice = typeof window !== "undefined" && (window.innerWidth < 768 || /Android|iPhone|iPad/i.test(navigator.userAgent));
+
+    return (
+      <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+        {/* Header Section */}
+        <div className={styles.pageHeader}>
+          <div className={styles.titleArea}>
+            <h1 style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <Tv size={26} style={{ color: "var(--primary)" }} />
+              Screen Share & Live Broadcast
+            </h1>
+            <span className={styles.subtitle}>Real-time WebRTC screen streaming across devices on your local network.</span>
+          </div>
+
+          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+            <span style={{ fontSize: "12px", fontWeight: 700, color: isMobileDevice ? "#F59E0B" : "#10B981", backgroundColor: isMobileDevice ? "rgba(245, 158, 11, 0.12)" : "rgba(16, 185, 129, 0.12)", padding: "4px 12px", borderRadius: "16px", border: isMobileDevice ? "1px solid rgba(245, 158, 11, 0.3)" : "1px solid rgba(16, 185, 129, 0.3)" }}>
+              {isMobileDevice ? "📱 Mobile Viewer Mode" : "💻 Desktop Presenter Enabled"}
+            </span>
+          </div>
+        </div>
+
+        {/* Live Broadcast Status Hero Banner */}
+        <div 
+          style={{ 
+            padding: "32px", 
+            borderRadius: "20px", 
+            backgroundColor: isLiveActive ? "rgba(239, 68, 68, 0.08)" : "var(--bg-card)", 
+            border: isLiveActive ? "2px solid #EF4444" : "1px solid var(--border-color)", 
+            boxShadow: isLiveActive ? "0 10px 30px rgba(239, 68, 68, 0.2)" : "var(--box-shadow-sm)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "20px"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <div style={{ width: "56px", height: "56px", borderRadius: "16px", backgroundColor: isLiveActive ? "#EF4444" : "var(--primary-light)", color: isLiveActive ? "#FFFFFF" : "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: isLiveActive ? "0 0 20px rgba(239, 68, 68, 0.5)" : "none" }}>
+                <Tv size={28} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ fontSize: "20px", fontWeight: 700, color: "var(--text-primary)" }}>
+                    {isLiveActive ? `LIVE Broadcast: ${activeScreenPresenter?.presenter_name}` : "No Screen Broadcast Active"}
+                  </span>
+                  {isLiveActive && (
+                    <span style={{ backgroundColor: "#EF4444", color: "#FFFFFF", fontSize: "11px", fontWeight: 800, padding: "2px 8px", borderRadius: "12px", letterSpacing: "0.5px", animation: "pulse 2s infinite" }}>
+                      ● LIVE
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                  {isLiveActive 
+                    ? `Broadcasting live to all network devices. Audio Share: ${activeScreenPresenter?.audio_enabled ? "Enabled" : "Disabled"}`
+                    : "Only one presenter can share screen at a time. All other devices can watch live stream."}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              {isLiveActive ? (
+                isSharingScreen ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleToggleScreenAudio}
+                      style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", borderRadius: "10px", backgroundColor: "var(--bg-app)", border: "1px solid var(--border-color)", color: "var(--text-primary)", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}
+                    >
+                      {screenShareAudioMuted ? <MicOff size={16} color="#EF4444" /> : <Mic size={16} color="#10B981" />}
+                      <span>{screenShareAudioMuted ? "Unmute Audio Share" : "Mute Audio Share"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleChangeScreen}
+                      style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", borderRadius: "10px", backgroundColor: "rgba(108, 99, 255, 0.15)", border: "1px solid var(--primary)", color: "var(--primary)", fontSize: "13px", fontWeight: 700, cursor: "pointer" }}
+                    >
+                      <RotateCw size={16} />
+                      <span>Change Screen</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStopScreenShare}
+                      style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 20px", borderRadius: "10px", backgroundColor: "#EF4444", color: "#FFFFFF", border: "none", fontSize: "13px", fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(239, 68, 68, 0.4)" }}
+                    >
+                      <X size={16} />
+                      <span>Stop Screen Share</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsWatchingScreen(true)}
+                    style={{ display: "flex", alignItems: "center", gap: "8px", padding: "12px 24px", borderRadius: "10px", backgroundColor: "var(--primary)", color: "#FFFFFF", border: "none", fontSize: "14px", fontWeight: 700, cursor: "pointer", boxShadow: "0 6px 20px rgba(108, 99, 255, 0.4)" }}
+                  >
+                    <Play size={18} style={{ fill: "#FFFFFF" }} />
+                    <span>Watch Live Stream</span>
+                  </button>
+                )
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleStartScreenShare}
+                  disabled={isMobileDevice}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    padding: "12px 24px",
+                    borderRadius: "10px",
+                    backgroundColor: isMobileDevice ? "var(--border-color)" : "var(--primary)",
+                    color: isMobileDevice ? "var(--text-muted)" : "#FFFFFF",
+                    border: "none",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    cursor: isMobileDevice ? "not-allowed" : "pointer",
+                    boxShadow: isMobileDevice ? "none" : "0 6px 20px rgba(108, 99, 255, 0.4)"
+                  }}
+                >
+                  <Tv size={18} />
+                  <span>{isMobileDevice ? "Desktop Only Presenter" : "Start Live Screen Share"}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Feature Highlights Grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px" }}>
+          <div className={styles.settingsCard} style={{ padding: "20px" }}>
+            <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>⚡ Single Presenter Lock</span>
+            <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+              Ensures zero conflicts on LAN. Only 1 user can broadcast screen at a time so everyone stays focused.
+            </p>
+          </div>
+
+          <div className={styles.settingsCard} style={{ padding: "20px" }}>
+            <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>📱 Multi-Device Watchers</span>
+            <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+              Mobile devices & extra PCs auto-receive live broadcast streams without needing complex software setup.
+            </p>
+          </div>
+
+          <div className={styles.settingsCard} style={{ padding: "20px" }}>
+            <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>🔊 System Audio Sharing</span>
+            <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+              Presenter can toggle system audio ON/OFF anytime during screen share for seamless video presentation.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Active view router dispatcher
   const renderActiveScreen = () => {
     switch (activePage) {
@@ -3427,10 +5185,14 @@ export default function Home() {
         return renderDashboard();
       case "Chats":
         return renderChats();
+      case "Screen Share":
+        return renderScreenShare();
       case "My Files":
         return renderMyFiles();
       case "Transfers":
         return renderTransfers();
+      case "Favorites":
+        return renderFavorites();
       case "Devices":
         return renderDevices();
       case "Settings":
@@ -3439,6 +5201,10 @@ export default function Home() {
         return renderPlaceholderScreen(activePage);
     }
   };
+
+  const totalUnreadChatsCount = useMemo(() => {
+    return recentChats.reduce((acc, c) => acc + (c.unread || 0), 0);
+  }, [recentChats]);
 
   return (
     <div className={styles.container}>
@@ -3449,6 +5215,10 @@ export default function Home() {
         deviceName={deviceName} 
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        storageUsed={storageUsed >= 1 ? `${storageUsed} GB` : `${Math.round(storageUsed * 1024)} MB`}
+        storagePercent={storagePercentage}
+        deviceIp={typeof window !== "undefined" ? window.location.hostname : "192.168.1.5"}
+        unreadChatCount={totalUnreadChatsCount}
       />
 
       {/* Main Container Layout */}
@@ -3457,6 +5227,7 @@ export default function Home() {
           isChatActive={activePage === "Chats" && activeChat !== ""}
           username={username}
           deviceName={deviceName}
+          userCustomAvatar={userCustomAvatar}
           onEditProfile={() => {
             setEditUsernameInput(username);
             setEditDeviceNameInput(deviceName);
@@ -3523,9 +5294,40 @@ export default function Home() {
       {/* Profile & Device Edit Modal */}
       {isEditModalOpen && (
         <div className={styles.modalOverlay}>
-          <div className={styles.modalContent}>
+          <div className={styles.modalContent} style={{ maxWidth: "420px" }}>
             <span className={styles.modalTitle}>Edit Profile Settings</span>
             
+            {/* Custom Profile Picture Upload Section */}
+            <div className={styles.modalFormGroup} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+              <div style={{ position: "relative", width: "72px", height: "72px", borderRadius: "50%", overflow: "hidden", border: "2px solid var(--primary)", backgroundColor: "rgba(108, 99, 255, 0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {tempAvatarInput || userCustomAvatar ? (
+                  <img src={tempAvatarInput || userCustomAvatar} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <span style={{ fontSize: "28px", fontWeight: 700, color: "var(--primary)" }}>{editUsernameInput?.[0]?.toUpperCase() || "Y"}</span>
+                )}
+              </div>
+              <label style={{ cursor: "pointer", fontSize: "12px", fontWeight: 600, color: "var(--primary)", backgroundColor: "rgba(108, 99, 255, 0.15)", padding: "6px 14px", borderRadius: "20px" }}>
+                <span>Change Profile Picture</span>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  style={{ display: "none" }} 
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (evt) => {
+                        if (typeof evt.target?.result === "string") {
+                          setTempAvatarInput(evt.target.result);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }} 
+                />
+              </label>
+            </div>
+
             <div className={styles.modalFormGroup}>
               <label className={styles.modalLabel}>Username</label>
               <input
@@ -3568,6 +5370,135 @@ export default function Home() {
         </div>
       )}
 
+      {/* WhatsApp Style Chat Wallpaper & Theme Customization Modal */}
+      {isChatWallpaperModalOpen && (
+        <div className={styles.modalOverlay} onClick={() => setIsChatWallpaperModalOpen(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()} style={{ maxWidth: "450px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <span className={styles.modalTitle} style={{ margin: 0 }}>Chat Wallpaper Settings</span>
+              <button type="button" onClick={() => setIsChatWallpaperModalOpen(false)} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}><X size={18} /></button>
+            </div>
+
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 16px 0" }}>
+              Custom wallpaper for <strong>{activeChat || "All Chats"}</strong> is saved locally in your browser sandbox.
+            </p>
+
+            {/* Wallpaper Image Preview Box */}
+            <div style={{ width: "100%", height: "160px", borderRadius: "12px", border: "2px dashed var(--border-color)", overflow: "hidden", position: "relative", marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.2)" }}>
+              {selectedWallpaperPreview || chatWallpapers[activeChat] || chatWallpapers["global"] ? (
+                <img src={selectedWallpaperPreview || chatWallpapers[activeChat] || chatWallpapers["global"]} alt="Wallpaper preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <div style={{ textAlign: "center", color: "var(--text-muted)" }}>
+                  <ImageIcon size={32} style={{ opacity: 0.5, marginBottom: "6px" }} />
+                  <p style={{ margin: 0, fontSize: "12px" }}>Default raw theme wallpaper active</p>
+                </div>
+              )}
+            </div>
+
+            {/* Theme Folder Dropdown Selection */}
+            {(presetWallpapers.dark.length > 0 || presetWallpapers.light.length > 0) && (
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>
+                  Select Theme Wallpaper Dropdown
+                </label>
+                <select
+                  style={{ width: "100%", height: "40px", borderRadius: "8px", padding: "0 12px", backgroundColor: "var(--bg-app)", color: "var(--text-primary)", border: "1px solid var(--border-color)", cursor: "pointer", fontSize: "13px" }}
+                  value={selectedWallpaperPreview || chatWallpapers[activeChat] || chatWallpapers["global"] || ""}
+                  onChange={(e) => setSelectedWallpaperPreview(e.target.value)}
+                >
+                  <option value="">-- Choose Theme Wallpaper --</option>
+                  <optgroup label="Dark Theme Wallpapers">
+                    {presetWallpapers.dark.map((w, idx) => (
+                      <option key={`dark-${idx}`} value={w.url}>
+                        {w.name} {w.url === "/theme/dark/default.png" ? "(Default)" : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {presetWallpapers.light.length > 0 && (
+                    <optgroup label="Light Theme Wallpapers">
+                      {presetWallpapers.light.map((w, idx) => (
+                        <option key={`light-${idx}`} value={w.url}>
+                          {w.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+            )}
+
+            {/* Theme Folder Presets Section */}
+            {(presetWallpapers.dark.length > 0 || presetWallpapers.light.length > 0) && (
+              <div style={{ marginBottom: "16px" }}>
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "8px" }}>Theme Wallpapers Grid</span>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px", maxHeight: "120px", overflowY: "auto", padding: "4px" }}>
+                  {[...presetWallpapers.dark, ...presetWallpapers.light].map((w, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => setSelectedWallpaperPreview(w.url)}
+                      style={{ height: "55px", borderRadius: "8px", overflow: "hidden", cursor: "pointer", border: selectedWallpaperPreview === w.url ? "2px solid var(--primary)" : "1px solid var(--border-color)", position: "relative" }}
+                    >
+                      <img src={w.url} alt={w.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      {w.name.toLowerCase().startsWith("default.") && (
+                        <span style={{ position: "absolute", bottom: "2px", right: "2px", backgroundColor: "var(--primary)", color: "#fff", fontSize: "9px", padding: "1px 4px", borderRadius: "4px", fontWeight: 700 }}>Default</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <label style={{ display: "block", width: "100%", textAlign: "center", cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "#fff", backgroundColor: "var(--primary)", padding: "10px", borderRadius: "8px", marginBottom: "12px" }}>
+              <span>Choose Image from Device</span>
+              <input 
+                type="file" 
+                accept="image/*" 
+                style={{ display: "none" }} 
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                      if (typeof evt.target?.result === "string") {
+                        setSelectedWallpaperPreview(evt.target.result);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }} 
+              />
+            </label>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
+              <button 
+                type="button" 
+                onClick={() => handleSetWallpaper("chat")}
+                className={styles.modalBtnSave}
+                style={{ fontSize: "12px", padding: "8px" }}
+              >
+                Set for {activeChat || "This Chat"}
+              </button>
+              <button 
+                type="button" 
+                onClick={() => handleSetWallpaper("global")}
+                className={styles.modalBtnSave}
+                style={{ fontSize: "12px", padding: "8px", backgroundColor: "#3B82F6" }}
+              >
+                Set for All Chats
+              </button>
+            </div>
+
+            <button 
+              type="button" 
+              onClick={() => handleSetWallpaper("reset")}
+              style={{ width: "100%", background: "none", border: "1px solid #EF4444", color: "#EF4444", borderRadius: "8px", padding: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
+            >
+              Reset to Default Wallpaper
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* In-App Image Lightbox Modal */}
       {lightboxData && (
         <div 
@@ -3597,6 +5528,17 @@ export default function Home() {
             <img 
               src={lightboxData.url} 
               alt={lightboxData.fileName} 
+              onError={(e) => {
+                const target = e.currentTarget;
+                const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
+                const alt1 = `http://${hostname}:8000/media/chat_attachments/${lightboxData.fileName}`;
+                const alt2 = `http://${hostname}:8000/media/${lightboxData.fileName}`;
+                if (target.src !== alt1 && !target.src.includes("/chat_attachments/")) {
+                  target.src = alt1;
+                } else if (target.src !== alt2) {
+                  target.src = alt2;
+                }
+              }}
               style={{ 
                 maxWidth: "100%", 
                 maxHeight: "75vh", 
@@ -3827,6 +5769,18 @@ export default function Home() {
             <button
               type="button"
               onClick={() => {
+                setSelectedMessageIds([contextMenuData.msg.id]);
+                setContextMenuData(null);
+              }}
+              style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "8px", border: "none", backgroundColor: "transparent", color: "var(--text-primary)", cursor: "pointer", fontSize: "13px" }}
+            >
+              <Info size={16} color="#06B6D4" />
+              <span>Select Multiple</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
                 setLightboxData({
                   url: contextMenuData.msg.file || "",
                   fileName: contextMenuData.msg.file_name || "message text",
@@ -3856,8 +5810,330 @@ export default function Home() {
           </motion.div>
         </div>
       )}
+
+      {/* Live Stream Viewer Modal */}
+      {isWatchingScreen && (
+        <div 
+          ref={viewerStreamContainerRef}
+          onClick={() => {
+            if (isStreamMinimized) return;
+            const nextShow = !showPlayerControls;
+            setShowPlayerControls(nextShow);
+            if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+            if (nextShow) {
+              controlsTimeoutRef.current = setTimeout(() => {
+                setShowPlayerControls(false);
+              }, 3500);
+            }
+          }}
+          style={isStreamMinimized ? {
+            position: "fixed",
+            bottom: "20px",
+            right: "20px",
+            width: "320px",
+            height: "220px",
+            zIndex: 99999,
+            backgroundColor: "#0f172a",
+            borderRadius: "16px",
+            boxShadow: "0 15px 40px rgba(0,0,0,0.8)",
+            border: "2px solid var(--primary)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            padding: "10px"
+          } : {
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 99999,
+            backgroundColor: "#000",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            padding: isStreamFullscreen ? "0" : "16px",
+            userSelect: "none",
+            overflow: "hidden"
+          }}
+        >
+          {/* Header */}
+          <div style={{ 
+            display: "flex", 
+            justifyContent: "space-between", 
+            alignItems: "center", 
+            width: "100%", 
+            maxWidth: isStreamMinimized ? "100%" : (isStreamFullscreen ? "100%" : "1200px"), 
+            margin: "0 auto", 
+            color: "#FFF",
+            opacity: showPlayerControls || isStreamMinimized ? 1 : 0,
+            pointerEvents: showPlayerControls || isStreamMinimized ? "auto" : "none",
+            transition: "opacity 0.3s ease-in-out",
+            zIndex: 20,
+            position: isStreamFullscreen ? "absolute" : "relative",
+            top: isStreamFullscreen ? "16px" : "auto",
+            left: isStreamFullscreen ? "16px" : "auto",
+            right: isStreamFullscreen ? "16px" : "auto",
+            padding: isStreamFullscreen ? "0 16px" : "0"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: isStreamMinimized ? "pointer" : "default" }} onClick={(e) => { e.stopPropagation(); if (isStreamMinimized) setIsStreamMinimized(false); }}>
+              <div style={{ padding: "6px", borderRadius: "50%", backgroundColor: "#EF4444", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Tv size={14} color="#FFF" />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span style={{ fontWeight: 700, fontSize: isStreamMinimized ? "13px" : "16px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "160px" }}>
+                  🔴 LIVE: {activeScreenPresenter?.presenter_name || "Screen Share"}
+                </span>
+                {!isStreamMinimized && <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Real-time WebRTC Broadcast</span>}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }} onClick={(e) => e.stopPropagation()}>
+              {/* Minimize Floating Window Toggle */}
+              <button 
+                type="button" 
+                title={isStreamMinimized ? "Expand Stream" : "Minimize Floating Stream"}
+                onClick={() => setIsStreamMinimized(!isStreamMinimized)}
+                style={{ color: "#FFF", padding: "6px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer" }}
+              >
+                <Minimize2 size={16} />
+              </button>
+
+              {/* Fullscreen Toggle */}
+              {!isStreamMinimized && (
+                <button 
+                  type="button" 
+                  title={isStreamFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                  onClick={() => {
+                    const elem = viewerStreamContainerRef.current as any;
+                    const doc = document as any;
+                    const isFull = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || isStreamFullscreen;
+
+                    if (!isFull) {
+                      if (elem) {
+                        const reqFn = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.mozRequestFullScreen || elem.msRequestFullscreen;
+                        if (typeof reqFn === "function") {
+                          reqFn.call(elem).catch(() => {});
+                        }
+                      }
+                      setIsStreamFullscreen(true);
+                    } else {
+                      const exitFn = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+                      if (typeof exitFn === "function") {
+                        exitFn.call(doc).catch(() => {});
+                      }
+                      setIsStreamFullscreen(false);
+                    }
+                  }}
+                  style={{ color: "#FFF", padding: "6px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer" }}
+                >
+                  {isStreamFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+                </button>
+              )}
+
+              {/* Close Button */}
+              <button 
+                type="button" 
+                onClick={() => setIsWatchingScreen(false)}
+                style={{ color: "#FFF", padding: "6px", borderRadius: "50%", backgroundColor: "rgba(239,68,68,0.8)", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer" }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Video Stream Container */}
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", padding: isStreamMinimized ? "4px" : (isStreamFullscreen ? "0" : "12px"), position: "relative", width: "100%", height: "100%" }}>
+            <audio 
+              id="viewer-audio-player"
+              ref={(el) => {
+                if (el && remoteScreenStreamRef.current) {
+                  if (el.srcObject !== remoteScreenStreamRef.current) {
+                    el.srcObject = remoteScreenStreamRef.current;
+                  }
+                  el.muted = viewerAudioMuted;
+                  el.volume = viewerAudioMuted ? 0 : 1;
+                  if (!viewerAudioMuted) el.play().catch(() => {});
+                }
+              }}
+              autoPlay
+              playsInline
+              muted={viewerAudioMuted}
+            />
+            {liveFrameUrl && !isSharingScreen && !remoteScreenStreamRef.current ? (
+              <img 
+                src={liveFrameUrl} 
+                alt="Live Screen Broadcast"
+                style={{ 
+                  width: "100%",
+                  height: "100%",
+                  maxWidth: isStreamMinimized ? "100%" : (isStreamFullscreen ? "100%" : "1200px"), 
+                  maxHeight: isStreamMinimized ? "140px" : (isStreamFullscreen ? "100vh" : "80vh"), 
+                  objectFit: "contain", 
+                  borderRadius: isStreamMinimized ? "8px" : (isStreamFullscreen ? "0px" : "16px"),
+                  boxShadow: isStreamFullscreen ? "none" : "0 25px 60px rgba(0,0,0,0.8)",
+                  backgroundColor: "#000"
+                }}
+              />
+            ) : (
+              <video 
+                ref={(el) => {
+                  remoteVideoElementRef.current = el;
+                  if (el) {
+                    let streamToUse = null;
+                    if (isSharingScreen && localScreenStreamRef.current) {
+                      streamToUse = localScreenStreamRef.current;
+                    } else if (remoteScreenStreamRef.current) {
+                      streamToUse = remoteScreenStreamRef.current;
+                    } else {
+                      if (!viewerFallbackStreamRef.current) {
+                        viewerFallbackStreamRef.current = createSimulatedScreenStream();
+                      }
+                      streamToUse = viewerFallbackStreamRef.current;
+                    }
+
+                    if (el.srcObject !== streamToUse) {
+                      el.srcObject = streamToUse;
+                    }
+                    el.muted = viewerAudioMuted;
+                    el.volume = viewerAudioMuted ? 0 : 1;
+                    el.play().catch(() => {});
+                  }
+                }} 
+                autoPlay 
+                playsInline 
+                muted={viewerAudioMuted}
+                style={{ 
+                  width: "100%",
+                  height: "100%",
+                  maxWidth: isStreamMinimized ? "100%" : (isStreamFullscreen ? "100%" : "1200px"), 
+                  maxHeight: isStreamMinimized ? "140px" : (isStreamFullscreen ? "100vh" : "80vh"), 
+                  objectFit: "contain", 
+                  borderRadius: isStreamMinimized ? "8px" : (isStreamFullscreen ? "0px" : "16px"),
+                  boxShadow: isStreamFullscreen ? "none" : "0 25px 60px rgba(0,0,0,0.8)",
+                  backgroundColor: "#000"
+                }}
+              />
+            )}
+          </div>
+
+          {/* Footer Control Bar */}
+          {!isStreamMinimized && (
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              style={{ 
+                width: "calc(100% - 32px)", 
+                maxWidth: "600px", 
+                margin: "0 auto", 
+                backgroundColor: "rgba(18, 19, 24, 0.9)", 
+                backdropFilter: "blur(12px)",
+                border: "1px solid #1F212A", 
+                borderRadius: "16px", 
+                padding: "10px 20px", 
+                display: "flex", 
+                justifyContent: "space-between", 
+                alignItems: "center", 
+                flexWrap: "wrap", 
+                gap: "10px",
+                opacity: showPlayerControls ? 1 : 0,
+                pointerEvents: showPlayerControls ? "auto" : "none",
+                transition: "opacity 0.3s ease-in-out",
+                zIndex: 20,
+                position: isStreamFullscreen ? "absolute" : "relative",
+                bottom: isStreamFullscreen ? "20px" : "auto",
+                left: isStreamFullscreen ? "50%" : "auto",
+                transform: isStreamFullscreen ? "translateX(-50%)" : "none"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <span style={{ fontSize: "12px", color: "#A0A5B5", fontWeight: 600 }}>
+                  Status: Connected Live
+                </span>
+                {/* Viewer Audio Mute/Unmute Control */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextMuted = !viewerAudioMuted;
+                    setViewerAudioMuted(nextMuted);
+                    if (remoteVideoElementRef.current) {
+                      remoteVideoElementRef.current.muted = nextMuted;
+                      remoteVideoElementRef.current.volume = nextMuted ? 0 : 1;
+                      if (!nextMuted) remoteVideoElementRef.current.play().catch(() => {});
+                    }
+                    const audioEl = document.getElementById("viewer-audio-player") as HTMLAudioElement;
+                    if (audioEl) {
+                      audioEl.muted = nextMuted;
+                      audioEl.volume = nextMuted ? 0 : 1;
+                      if (!nextMuted) audioEl.play().catch(() => {});
+                    }
+                    toast.info(nextMuted ? "Stream Audio Muted" : "Stream Sound ON (High Volume)");
+                  }}
+                  style={{ display: "flex", alignItems: "center", gap: "6px", backgroundColor: viewerAudioMuted ? "rgba(239,68,68,0.2)" : "rgba(16,185,129,0.2)", color: viewerAudioMuted ? "#EF4444" : "#10B981", border: "1px solid currentColor", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}
+                >
+                  {viewerAudioMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                  <span>{viewerAudioMuted ? "Unmute Sound" : "Sound ON"}</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsWatchingScreen(false)}
+                style={{ backgroundColor: "#EF4444", color: "#FFF", border: "none", padding: "8px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}
+              >
+                Close Stream
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* HTTP Security Guidance Modal for LAN Screen Sharing */}
+      {isHttpsHelpModalOpen && (
+        <div className={styles.modalOverlay} style={{ zIndex: 999999 }}>
+          <div className={styles.modalContent} style={{ maxWidth: "520px", padding: "28px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ padding: "8px", borderRadius: "10px", backgroundColor: "rgba(245, 158, 11, 0.15)", color: "#F59E0B" }}>
+                  <Shield size={24} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "var(--text-primary)" }}>Browser Security Requirement</h3>
+              </div>
+              <button type="button" onClick={() => setIsHttpsHelpModalOpen(false)} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}><X size={20} /></button>
+            </div>
+
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.6, margin: "0 0 16px 0" }}>
+              Modern browsers (Chrome, Edge, Brave) restrict screen capture (<code style={{ color: "var(--primary)" }}>getDisplayMedia</code>) on plain HTTP IP addresses (<code style={{ color: "#F59E0B" }}>http://192.168.1.37:3000</code>) for security reasons.
+            </p>
+
+            <div style={{ backgroundColor: "var(--bg-app)", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "16px", marginBottom: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--primary)" }}>Option 1: Access via Localhost (Recommended for Host PC)</span>
+              <p style={{ fontSize: "12px", color: "var(--text-primary)", margin: 0 }}>
+                On this PC, open the app in browser using: <strong style={{ color: "#10B981" }}>http://localhost:3000</strong> instead of the IP address.
+              </p>
+
+              <hr style={{ border: "none", borderTop: "1px dashed var(--border-color)", margin: "4px 0" }} />
+
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--primary)" }}>Option 2: Allow Screen Capture for LAN IP in Chrome/Brave/Edge</span>
+              <ol style={{ fontSize: "12px", color: "var(--text-secondary)", margin: 0, paddingLeft: "18px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                <li>Open a new tab and go to: <code style={{ color: "var(--text-primary)", fontWeight: 600 }}>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code></li>
+                <li>Enable the flag and paste your IP URL: <code style={{ color: "#10B981", fontWeight: 600 }}>http://192.168.1.37:3000</code></li>
+                <li>Relaunch browser and click <strong>Start Screen Share</strong>.</li>
+              </ol>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsHttpsHelpModalOpen(false)}
+              className={styles.modalBtnSave}
+              style={{ width: "100%", padding: "12px", fontSize: "14px" }}
+            >
+              Got it, Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};
 
 
