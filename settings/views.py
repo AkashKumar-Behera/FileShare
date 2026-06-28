@@ -29,3 +29,32 @@ class DeviceSettingsViewSet(viewsets.ModelViewSet):
             
         serializer = self.get_serializer(settings_obj)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def theme_wallpapers(self, request):
+        import os
+        from django.conf import settings
+        base_dir = settings.BASE_DIR
+        theme_dir = os.path.join(base_dir, 'frontend', 'public', 'theme')
+        
+        result = {
+            "dark": [],
+            "light": [],
+            "default_dark": None,
+            "default_light": None
+        }
+        
+        for mode in ['dark', 'light']:
+            mode_path = os.path.join(theme_dir, mode)
+            if os.path.exists(mode_path):
+                for filename in os.listdir(mode_path):
+                    if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg')):
+                        url = f"/theme/{mode}/{filename}"
+                        result[mode].append({
+                            "name": filename,
+                            "url": url
+                        })
+                        if filename.lower().startswith('default.'):
+                            result[f"default_{mode}"] = url
+                            
+        return Response(result)
