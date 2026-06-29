@@ -17,3 +17,4 @@
 [2026-06-30 02:20:00] Add file type extension detection and custom category icons
 [2026-06-30 02:25:00] Design file manager views for my files list
 [2026-06-30 02:30:00] Implement direct peer communication WebSocket relay
+[2026-06-30 02:35:00] Add screen sharing WebRTC initial signaling consumer
