@@ -1,10 +1,10 @@
 from django.db import models
-from devices.models import Device
+from django.contrib.auth.models import User
 
 class Chat(models.Model):
     is_group = models.BooleanField(default=False)
     name = models.CharField(max_length=150, null=True, blank=True)
-    participants = models.ManyToManyField(Device, related_name='chats')
+    participants = models.ManyToManyField(User, related_name='chats')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -14,7 +14,7 @@ class Chat(models.Model):
 
 class Message(models.Model):
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name='messages')
-    sender = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='sent_messages')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
     text = models.TextField()
     emoji = models.CharField(max_length=50, null=True, blank=True)
     reply_to = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='replies')
@@ -33,3 +33,4 @@ class Message(models.Model):
 
     def __str__(self):
         return f"Message {self.id} from {self.sender.username}"
+

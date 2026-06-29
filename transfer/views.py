@@ -2,12 +2,19 @@ import os
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
 from django.conf import settings
 from django.http import FileResponse, Http404
 from transfer.models import Transfer
 from transfer.serializers import TransferSerializer
 from devices.models import Device
 
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+
+from django.db.models import Q
+
+@method_decorator(csrf_exempt, name='dispatch')
 class TransferViewSet(viewsets.ModelViewSet):
     queryset = Transfer.objects.all()
     serializer_class = TransferSerializer
@@ -35,7 +42,22 @@ class TransferViewSet(viewsets.ModelViewSet):
         if not device_id:
             return Response({"error": "device_id is required"}, status=status.HTTP_400_BAD_REQUEST)
             
-        transfers = Transfer.objects.filter(sender__device_id=device_id) | Transfer.objects.filter(receiver__device_id=device_id)
+        try:
+            device = Device.objects.get(device_id=device_id)
+            user = device.user
+            username = device.username
+        except Device.DoesNotExist:
+            user = None
+            username = None
+
+        filters = Q(sender__device_id=device_id) | Q(receiver__device_id=device_id)
+
+        if user:
+            filters |= Q(sender__user=user) | Q(receiver__user=user)
+        if username:
+            filters |= Q(sender__username=username) | Q(receiver__username=username)
+
+        transfers = Transfer.objects.filter(filters).distinct()
         serializer = self.get_serializer(transfers.order_by('-created_at'), many=True)
         return Response(serializer.data)
 
@@ -109,14 +131,34 @@ class TransferViewSet(viewsets.ModelViewSet):
 
         return Response({"status": "chunk_received", "received": existing_chunks, "total": total_chunks})
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['get'], permission_classes=[AllowAny], authentication_classes=[])
     def download_file(self, request, pk=None):
         try:
             transfer = self.get_object()
-            final_filename = f"{transfer.id}_{transfer.file_name}"
-            file_path = os.path.join(settings.MEDIA_ROOT, 'transfers', final_filename)
+            file_path = os.path.join(settings.MEDIA_ROOT, 'transfers', f"{transfer.id}_{transfer.file_name}")
             if not os.path.exists(file_path):
-                raise Http404("File not found on server disk")
+                file_path = os.path.join(settings.MEDIA_ROOT, 'chat_attachments', transfer.file_name)
+                if not os.path.exists(file_path):
+                    raise Http404("File not found on server disk")
+            return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=transfer.file_name)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny], authentication_classes=[])
+    def public_files(self, request):
+        transfers = Transfer.objects.filter(status='completed').order_by('-created_at')
+        serializer = self.get_serializer(transfers, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], permission_classes=[AllowAny], authentication_classes=[])
+    def public_download_file(self, request, pk=None):
+        try:
+            transfer = self.get_object()
+            file_path = os.path.join(settings.MEDIA_ROOT, 'transfers', f"{transfer.id}_{transfer.file_name}")
+            if not os.path.exists(file_path):
+                file_path = os.path.join(settings.MEDIA_ROOT, 'chat_attachments', transfer.file_name)
+                if not os.path.exists(file_path):
+                    raise Http404("File not found on server disk")
             return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=transfer.file_name)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)

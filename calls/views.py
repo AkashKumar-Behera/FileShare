@@ -21,6 +21,10 @@ ACTIVE_SCREEN_SHARE = {
 WEBRTC_SIGNAL_BUFFER = {}
 LIVE_SCREEN_FRAME = None
 
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+
+@method_decorator(csrf_exempt, name='dispatch')
 class CallSessionViewSet(viewsets.ModelViewSet):
     queryset = CallSession.objects.all()
     serializer_class = CallSessionSerializer
@@ -144,8 +148,7 @@ class CallSessionViewSet(viewsets.ModelViewSet):
             return Response({"frame": LIVE_SCREEN_FRAME})
         
         frame_data = request.data.get('frame')
-        dev_id = request.data.get('device_id')
-        if ACTIVE_SCREEN_SHARE["active"] and ACTIVE_SCREEN_SHARE["presenter_device_id"] == dev_id:
+        if ACTIVE_SCREEN_SHARE["active"]:
             LIVE_SCREEN_FRAME = frame_data
             return Response({"status": "updated"})
         return Response({"status": "ignored"})

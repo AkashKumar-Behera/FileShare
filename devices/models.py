@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 class Device(models.Model):
     DEVICE_TYPES = [
@@ -10,6 +11,7 @@ class Device(models.Model):
 
     device_id = models.CharField(max_length=255, unique=True, db_index=True)
     username = models.CharField(max_length=150)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='devices')
     device_name = models.CharField(max_length=150)
     avatar = models.TextField(null=True, blank=True, default='avatar_1')
     ip_address = models.GenericIPAddressField(null=True, blank=True)
@@ -21,3 +23,4 @@ class Device(models.Model):
 
     def __str__(self):
         return f"{self.device_name} ({self.username})"
+

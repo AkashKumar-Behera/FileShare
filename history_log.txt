@@ -33,3 +33,4 @@
 [2026-06-30 03:40:00] Implement visual image thumbnails in Quick Downloader using API URL
 [2026-06-30 03:45:00] Configure hover-to-play micro-preview for video transfers
 [2026-06-30 03:50:00] Add interactive play/pause audio preview player in list
+[2026-06-30 03:55:00] Implement fallback check to serve files from chat attachments folder

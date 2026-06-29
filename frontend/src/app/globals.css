@@ -6,10 +6,10 @@
   --bg-card: #FFFFFF;
   --border-color: #ECEFF6;
   
-  --primary: #5E5CE6;
-  --primary-hover: #4C4ABF;
-  --primary-light: #F2F1FD;
-  --primary-muted: #8E8DF1;
+  --primary: #4338CA;
+  --primary-hover: #3730A3;
+  --primary-light: #EEF2FF;
+  --primary-muted: #6366F1;
 
   --success: #10B981;
   --success-light: #E7F9F3;
@@ -52,10 +52,10 @@
   --bg-secondary-btn: #1E202A;
   --border-color: #1F212A;
   
-  --primary: #6C63FF;
-  --primary-hover: #7E76FF;
-  --primary-light: rgba(108, 99, 255, 0.16);
-  --primary-muted: #8E8DF1;
+  --primary: #4F46E5;
+  --primary-hover: #4338CA;
+  --primary-light: rgba(79, 70, 229, 0.2);
+  --primary-muted: #6366F1;
 
   --text-primary: #FFFFFF;
   --text-secondary: #A0A5B5;

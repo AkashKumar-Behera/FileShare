@@ -57,6 +57,7 @@ import {
   Share2,
   Sparkles,
   UploadCloud,
+  Download,
   Clipboard,
   Users,
   Tv,
@@ -127,6 +128,7 @@ interface TransferItem {
 interface ChatMessage {
   id: string;
   sender: "you" | "other";
+  sender_user_id?: number;
   text?: string;
   time: string;
   file?: string;
@@ -135,6 +137,7 @@ interface ChatMessage {
   file_type?: string;
   reply_to_text?: string;
   reply_to_sender?: string;
+  is_read?: boolean;
 }
 
 
@@ -179,27 +182,45 @@ function StarParticlesCanvas({ enabled, customWallpaperUrl }: { enabled: boolean
     };
     window.addEventListener("resize", handleResize);
 
+    const drawCoverImage = (img: HTMLImageElement) => {
+      const imgRatio = img.naturalWidth / img.naturalHeight;
+      const canvasRatio = width / height;
+      let renderW = width;
+      let renderH = height;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (imgRatio > canvasRatio) {
+        renderW = height * imgRatio;
+        offsetX = (width - renderW) / 2;
+      } else {
+        renderH = width / imgRatio;
+        offsetY = (height - renderH) / 2;
+      }
+      ctx.drawImage(img, offsetX, offsetY, renderW, renderH);
+    };
+
     const render = () => {
       ctx.clearRect(0, 0, width, height);
       const isCurrentlyDark = document.documentElement.classList.contains("dark");
 
       if (customImgRef.current && customImgRef.current.complete && customImgRef.current.naturalWidth > 0) {
-        ctx.drawImage(customImgRef.current, 0, 0, width, height);
+        drawCoverImage(customImgRef.current);
       } else if (isCurrentlyDark) {
         const isMobileScreen = width < 768 || window.innerWidth < 768;
         const activeWallpaper = isMobileScreen ? mobileDarkWallpaper : darkWallpaper;
 
         if (activeWallpaper.complete && activeWallpaper.naturalWidth > 0) {
-          ctx.drawImage(activeWallpaper, 0, 0, width, height);
+          drawCoverImage(activeWallpaper);
         } else if (darkWallpaper.complete && darkWallpaper.naturalWidth > 0) {
-          ctx.drawImage(darkWallpaper, 0, 0, width, height);
+          drawCoverImage(darkWallpaper);
         } else {
           ctx.fillStyle = "#0c1020";
           ctx.fillRect(0, 0, width, height);
         }
       } else {
         if (lightWallpaper.complete && lightWallpaper.naturalWidth > 0) {
-          ctx.drawImage(lightWallpaper, 0, 0, width, height);
+          drawCoverImage(lightWallpaper);
         } else {
           ctx.fillStyle = "#e0f2fe";
           ctx.fillRect(0, 0, width, height);
@@ -238,6 +259,70 @@ function StarParticlesCanvas({ enabled, customWallpaperUrl }: { enabled: boolean
 
 
 export default function Home() {
+
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [loginUsername, setLoginUsername] = useState<string>("");
+  const [loginPassword, setLoginPassword] = useState<string>("");
+  const [authEmail, setAuthEmail] = useState<string>("");
+  const [authName, setAuthName] = useState<string>("");
+  const [isRegistering, setIsRegistering] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string>( "");
+
+  // Public/Anonymous Downloader States
+  const [isQuickDownloader, setIsQuickDownloader] = useState<boolean>(false);
+  const [publicFiles, setPublicFiles] = useState<any[]>([]);
+  const [publicSearchQuery, setPublicSearchQuery] = useState("");
+  const [isFetchingPublicFiles, setIsFetchingPublicFiles] = useState(false);
+  const [playingAudioId, setPlayingAudioId] = useState<number | null>(null);
+  const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
+
+  const handleToggleAudioPreview = (fileId: number, url: string) => {
+    if (playingAudioId === fileId) {
+      if (previewAudio) {
+        previewAudio.pause();
+      }
+      setPlayingAudioId(null);
+    } else {
+      if (previewAudio) {
+        previewAudio.pause();
+      }
+      const audio = new Audio(url);
+      audio.play().catch(() => {});
+      audio.onended = () => {
+        setPlayingAudioId(null);
+      };
+      setPreviewAudio(audio);
+      setPlayingAudioId(fileId);
+    }
+  };
+
+  const fetchPublicFiles = async () => {
+    setIsFetchingPublicFiles(true);
+    try {
+      const res = await fetch(getApiUrl("/transfers/public_files"));
+      if (res.ok) {
+        const data = await res.json();
+        setPublicFiles(data);
+      }
+    } catch (e) {
+      console.error("Error fetching public files:", e);
+    } finally {
+      setIsFetchingPublicFiles(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (isQuickDownloader) {
+      fetchPublicFiles();
+    }
+  }, [isQuickDownloader]);
+
+  // Profile setup states
+  const [showProfileSetupModal, setShowProfileSetupModal] = useState<boolean>(false);
+  const [setupDeviceName, setSetupDeviceName] = useState<string>("");
+  const [setupAvatarFile, setSetupAvatarFile] = useState<File | null>(null);
+  const [setupAvatarPreview, setSetupAvatarPreview] = useState<string | null>(null);
+  const [setupSubmitting, setSetupSubmitting] = useState<boolean>(false);
 
   const [activePage, setActivePage] = useState<string>("Dashboard");
   const [showTip, setShowTip] = useState(true);
@@ -336,6 +421,7 @@ export default function Home() {
   const [isStreamMinimized, setIsStreamMinimized] = useState(false);
   const [isStreamFullscreen, setIsStreamFullscreen] = useState(false);
   const [viewerAudioMuted, setViewerAudioMuted] = useState(true);
+  const [hasRemoteStream, setHasRemoteStream] = useState(false);
   const [showPlayerControls, setShowPlayerControls] = useState(true);
   const controlsTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   
@@ -419,7 +505,17 @@ export default function Home() {
     return stream;
   };
 
+  const unlockRealIpPermissions = async () => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+        s.getTracks().forEach(t => t.stop());
+      }
+    } catch {}
+  };
+
   const handleStartScreenShare = async () => {
+    await unlockRealIpPermissions();
     // 1. Mobile Check (Desktop Only Presenter)
     const isMobileDevice = typeof window !== "undefined" && (window.innerWidth < 768 || /Android|iPhone|iPad/i.test(navigator.userAgent));
     if (isMobileDevice) {
@@ -608,26 +704,50 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [isWatchingScreen]);
 
+  React.useEffect(() => {
+    if (!isWatchingScreen) {
+      if (viewerPeerConnectionRef.current) {
+        try {
+          viewerPeerConnectionRef.current.close();
+        } catch {}
+        viewerPeerConnectionRef.current = null;
+      }
+      remoteScreenStreamRef.current = null;
+      setHasRemoteStream(false);
+    }
+  }, [isWatchingScreen]);
+
   // WebRTC P2P Signaling Loop for Native H.264 Screen & System Audio Streaming
   React.useEffect(() => {
     if (typeof window === "undefined" || !deviceId) return;
 
-    const rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+    const currentHost = typeof window !== "undefined" ? window.location.hostname : "localhost";
+    const rtcConfig = {
+      iceServers: [
+        { urls: `turn:${currentHost}:3478?transport=udp`, username: "fileshare", credential: "fileshare_password" },
+        { urls: `turn:${currentHost}:3478?transport=tcp`, username: "fileshare", credential: "fileshare_password" },
+        { urls: "stun:stun.l.google.com:19302" }
+      ]
+    };
 
-    // Viewer joining notification
-    if (isWatchingScreen && !isSharingScreen) {
-      fetch(getApiUrl("/calls/signal"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to_device: "presenter",
-          from_device: deviceId,
-          signal: { type: "viewer_join" }
-        })
-      }).catch(() => {});
-    }
-
+    let viewerJoinCounter = 0;
     const interval = setInterval(() => {
+      // Periodic viewer join retry if WebRTC is not yet established
+      if (isWatchingScreen && !isSharingScreen && !remoteScreenStreamRef.current) {
+        viewerJoinCounter++;
+        if (viewerJoinCounter % 2 === 0) {
+          fetch(getApiUrl("/calls/signal"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to_device: "presenter",
+              from_device: deviceId,
+              signal: { type: "viewer_join" }
+            })
+          }).catch(() => {});
+        }
+      }
+
       fetch(getApiUrl(`/calls/signal?device_id=${deviceId}`))
         .then(res => res.json())
         .then((signals: any[]) => {
@@ -677,12 +797,12 @@ export default function Home() {
               } else if (sig.type === "sdp-answer") {
                 const pc = peerConnectionsRef.current.get(senderId);
                 if (pc && sig.sdp) {
-                  await pc.setRemoteDescription(new RTCSessionDescription(sig.sdp));
+                  await pc.setRemoteDescription(new RTCSessionDescription(sig.sdp)).catch(() => {});
                 }
               } else if (sig.type === "ice-candidate") {
                 const pc = peerConnectionsRef.current.get(senderId);
-                if (pc && sig.candidate) {
-                  await pc.addIceCandidate(new RTCIceCandidate(sig.candidate));
+                if (pc && sig.candidate && pc.remoteDescription && pc.remoteDescription.type) {
+                  await pc.addIceCandidate(new RTCIceCandidate(sig.candidate)).catch(() => {});
                 }
               }
             }
@@ -693,9 +813,17 @@ export default function Home() {
                 const pc = new RTCPeerConnection(rtcConfig);
                 viewerPeerConnectionRef.current = pc;
 
+                pc.onconnectionstatechange = () => {
+                  if (pc.connectionState === "failed" || pc.connectionState === "disconnected" || pc.connectionState === "closed") {
+                    remoteScreenStreamRef.current = null;
+                    setHasRemoteStream(false);
+                  }
+                };
+
                 pc.ontrack = (e) => {
                   if (e.streams && e.streams[0]) {
                     remoteScreenStreamRef.current = e.streams[0];
+                    setHasRemoteStream(true);
                     if (remoteVideoElementRef.current) {
                       remoteVideoElementRef.current.srcObject = e.streams[0];
                       remoteVideoElementRef.current.play().catch(() => {});
@@ -717,7 +845,7 @@ export default function Home() {
                   }
                 };
 
-                await pc.setRemoteDescription(new RTCSessionDescription(sig.sdp));
+                await pc.setRemoteDescription(new RTCSessionDescription(sig.sdp)).catch(() => {});
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
 
@@ -732,8 +860,8 @@ export default function Home() {
                 }).catch(() => {});
               } else if (sig.type === "ice-candidate") {
                 const pc = viewerPeerConnectionRef.current;
-                if (pc && sig.candidate) {
-                  await pc.addIceCandidate(new RTCIceCandidate(sig.candidate));
+                if (pc && sig.candidate && pc.remoteDescription && pc.remoteDescription.type) {
+                  await pc.addIceCandidate(new RTCIceCandidate(sig.candidate)).catch(() => {});
                 }
               }
             }
@@ -752,9 +880,16 @@ export default function Home() {
     const offscreenVideo = document.createElement("video");
     offscreenVideo.muted = true;
     offscreenVideo.playsInline = true;
+    offscreenVideo.style.position = "absolute";
+    offscreenVideo.style.width = "0px";
+    offscreenVideo.style.height = "0px";
+    offscreenVideo.style.pointerEvents = "none";
+    offscreenVideo.style.opacity = "0";
+    document.body.appendChild(offscreenVideo);
+
     const offscreenCanvas = document.createElement("canvas");
-    offscreenCanvas.width = 1920;
-    offscreenCanvas.height = 1080;
+    offscreenCanvas.width = 1280;
+    offscreenCanvas.height = 720;
     const ctx = offscreenCanvas.getContext("2d");
     
     let isUploading = false;
@@ -766,19 +901,23 @@ export default function Home() {
           offscreenVideo.srcObject = localScreenStreamRef.current;
           offscreenVideo.play().catch(() => {});
         }
-        if (ctx && offscreenVideo.readyState >= 2 && !isUploading) {
+        if (ctx && !isUploading && offscreenVideo.videoWidth > 0) {
           isUploading = true;
-          ctx.drawImage(offscreenVideo, 0, 0, 1920, 1080);
-          const frameData = offscreenCanvas.toDataURL("image/jpeg", 0.7);
-          fetch(getApiUrl("/calls/live_frame"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ device_id: deviceId, frame: frameData })
-          })
-          .catch(() => {})
-          .finally(() => { isUploading = false; });
+          try {
+            ctx.drawImage(offscreenVideo, 0, 0, 1280, 720);
+            const frameData = offscreenCanvas.toDataURL("image/jpeg", 0.6);
+            fetch(getApiUrl("/calls/live_frame"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ device_id: deviceId, frame: frameData })
+            })
+            .catch(() => {})
+            .finally(() => { isUploading = false; });
+          } catch {
+            isUploading = false;
+          }
         }
-      } else if (isWatchingScreen && !isSharingScreen && !remoteScreenStreamRef.current) {
+      } else if (isWatchingScreen && !isSharingScreen) {
         if (!isFetching) {
           isFetching = true;
           fetch(getApiUrl("/calls/live_frame"))
@@ -792,12 +931,15 @@ export default function Home() {
             .finally(() => { isFetching = false; });
         }
       }
-    }, 40);
+    }, 50);
 
     return () => {
       clearInterval(interval);
       offscreenVideo.pause();
       offscreenVideo.srcObject = null;
+      if (document.body.contains(offscreenVideo)) {
+        document.body.removeChild(offscreenVideo);
+      }
     };
   }, [isSharingScreen, isWatchingScreen, deviceId]);
 
@@ -1039,7 +1181,12 @@ export default function Home() {
 
   React.useEffect(() => {
     scrollToBottom(true);
+    activeChatRef.current = activeChat;
   }, [activeChat]);
+
+  React.useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
 
   React.useEffect(() => {
     scrollToBottom(false);
@@ -1097,21 +1244,94 @@ export default function Home() {
       }
       setDeviceId(savedId);
 
-      let savedUser = localStorage.getItem("username");
-      if (!savedUser) {
-        savedUser = "You";
-        localStorage.setItem("username", savedUser);
+      // Auto-detect device name & type if not already saved
+      const ua = navigator.userAgent;
+      let detectedType = "desktop";
+      let detectedName = "Windows PC";
+      if (/android/i.test(ua)) {
+        detectedType = "mobile";
+        detectedName = "Android Phone";
+      } else if (/iPad|iPhone|iPod/.test(ua)) {
+        detectedType = "mobile";
+        detectedName = "iPhone";
+      } else if (/Macintosh/i.test(ua)) {
+        detectedName = "Macbook";
+      } else if (/Linux/i.test(ua)) {
+        detectedName = "Linux PC";
       }
-      setUsername(savedUser);
-      setEditUsernameInput(savedUser);
 
       let savedDevice = localStorage.getItem("deviceName");
       if (!savedDevice) {
-        savedDevice = "LAPTOP-01";
+        savedDevice = detectedName;
         localStorage.setItem("deviceName", savedDevice);
       }
       setDeviceName(savedDevice);
       setEditDeviceNameInput(savedDevice);
+
+      let savedUser = localStorage.getItem("fileshare_logged_in_user");
+      if (savedUser) {
+        setIsLoggedIn(true);
+        setUsername(savedUser);
+        setEditUsernameInput(savedUser);
+
+        const isProfileDone = localStorage.getItem("fileshare_profile_completed");
+        if (!isProfileDone) {
+          setSetupDeviceName(savedDevice);
+          setShowProfileSetupModal(true);
+        }
+
+        // Fetch dynamic theme wallpapers from backend theme directory
+        fetch(getApiUrl("/settings/device_settings/theme_wallpapers"))
+          .then(res => res.json())
+          .then((data: any) => {
+            if (data && typeof data === "object") {
+              setPresetWallpapers(data);
+              const isDark = localStorage.getItem("theme") === "dark" || (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+              const defaultBg = isDark ? data.default_dark : data.default_light;
+              if (defaultBg) {
+                setChatWallpapers(prev => {
+                  if (!prev["global"]) {
+                    return { ...prev, global: defaultBg };
+                  }
+                  return prev;
+                });
+              }
+            }
+          }).catch(() => {});
+
+        // Register device on backend
+        fetch(getApiUrl("/devices/register"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            device_id: savedId,
+            username: savedUser,
+            device_name: savedDevice,
+            device_type: detectedType,
+            avatar: localStorage.getItem("fileshare_user_avatar") || "avatar_1"
+          })
+        })
+        .then(res => {
+          if (!res.ok) throw new Error("Backend response error");
+          return res.json();
+        })
+        .then(data => {
+          console.log("Registered self on backend:", data);
+          if (data && data.avatar && data.avatar !== 'avatar_1') {
+            setUserCustomAvatar(data.avatar);
+            localStorage.setItem("userCustomAvatar", data.avatar);
+            localStorage.setItem("fileshare_profile_completed", "true");
+          }
+          handleRefreshDevices(savedId);
+          loadRecentChats(savedId);
+          loadRealTransfers(savedId);
+        })
+        .catch(err => {
+          console.warn("Django backend offline, running in mock LAN mode:", err);
+        });
+      } else {
+        setIsLoggedIn(false);
+      }
 
       let savedAvatar = localStorage.getItem("fileshare_user_avatar");
       if (savedAvatar) {
@@ -1123,26 +1343,6 @@ export default function Home() {
         setChatWallpapers(savedWallpapers);
       } catch {}
 
-      // Fetch dynamic theme wallpapers from backend theme directory
-      fetch(getApiUrl("/settings/device_settings/theme_wallpapers"))
-        .then(res => res.json())
-        .then((data: any) => {
-          if (data && typeof data === "object") {
-            setPresetWallpapers(data);
-            const isDark = localStorage.getItem("theme") === "dark" || (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
-            const defaultBg = isDark ? data.default_dark : data.default_light;
-            if (defaultBg) {
-              setChatWallpapers(prev => {
-                if (!prev["global"]) {
-                  return { ...prev, global: defaultBg };
-                }
-                return prev;
-              });
-            }
-          }
-        })
-        .catch(() => {});
-
       let savedTheme = localStorage.getItem("theme");
       if (savedTheme === "dark" || (!savedTheme && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
         setSettingsDarkMode(true);
@@ -1151,34 +1351,8 @@ export default function Home() {
         setSettingsDarkMode(false);
         document.documentElement.classList.remove("dark");
       }
-
-      // Register device on backend
-      fetch(getApiUrl("/devices/register"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          device_id: savedId,
-          username: savedUser,
-          device_name: savedDevice,
-          device_type: "desktop",
-          avatar: (typeof window !== "undefined" ? localStorage.getItem("fileshare_user_avatar") : null) || "avatar_1"
-        })
-      })
-      .then(res => {
-        if (!res.ok) throw new Error("Backend response error");
-        return res.json();
-      })
-      .then(data => {
-        console.log("Registered self on backend:", data);
-        handleRefreshDevices(savedId);
-        loadRecentChats(savedId);
-        loadRealTransfers(savedId);
-      })
-      .catch(err => {
-        console.warn("Django backend offline, running in mock LAN mode:", err);
-      });
     }
-  }, []);
+  }, [isLoggedIn]);
 
   // Fetch online devices
   const handleRefreshDevices = (myId = deviceId) => {
@@ -1193,7 +1367,11 @@ export default function Home() {
       })
       .then((data: any[]) => {
         const avatarsMap: Record<string, string> = {};
-        const mapped = data.map(d => {
+        const filtered = data.filter(d => {
+          const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
+          return displayName !== username && d.device_name !== deviceName && d.device_id !== targetId;
+        });
+        const mapped = filtered.map(d => {
           const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
           if (d.avatar && d.avatar !== "avatar_1") {
             avatarsMap[displayName] = d.avatar;
@@ -1225,12 +1403,38 @@ export default function Home() {
       .then(res => res.json())
       .then((allDevs: any[]) => {
         if (Array.isArray(allDevs) && allDevs.length > 0) {
-          const formatted = allDevs.map(d => ({
-            name: (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name,
-            ip: d.ip_address || "192.168.1.1",
-            type: (d.device_type && d.device_type.toLowerCase() === "mobile") ? "Android" : ((d.device_type && d.device_type.toLowerCase() === "tablet") ? "iOS" : "Windows"),
-            lastSeen: d.is_online ? "Just now" : (d.last_seen ? new Date(d.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Recently"),
-            status: d.is_online ? "Online" : "Offline"
+          const groups: Record<string, { name: string; ip: string; types: string[]; isOnline: boolean; lastSeenTime: string }> = {};
+          
+          allDevs.forEach(d => {
+            const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
+            const devType = (d.device_type && d.device_type.toLowerCase() === "mobile") ? "Android" : ((d.device_type && d.device_type.toLowerCase() === "tablet") ? "iOS" : "Windows");
+            
+            if (!groups[displayName]) {
+              groups[displayName] = {
+                name: displayName,
+                ip: d.ip_address || "192.168.1.1",
+                types: [devType],
+                isOnline: !!d.is_online,
+                lastSeenTime: d.is_online ? "Just now" : (d.last_seen ? new Date(d.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Recently")
+              };
+            } else {
+              if (!groups[displayName].types.includes(devType)) {
+                groups[displayName].types.push(devType);
+              }
+              if (d.is_online) {
+                groups[displayName].isOnline = true;
+                groups[displayName].lastSeenTime = "Just now";
+                groups[displayName].ip = d.ip_address || groups[displayName].ip;
+              }
+            }
+          });
+
+          const formatted = Object.values(groups).map(g => ({
+            name: g.name,
+            ip: g.ip,
+            type: g.types.join("/"),
+            lastSeen: g.lastSeenTime,
+            status: g.isOnline ? "Online" : "Offline"
           }));
           setDevicesList(formatted);
         }
@@ -1260,8 +1464,11 @@ export default function Home() {
       })
       .then((data: any[]) => {
         const formatted = data.map(chat => {
-          const other = chat.participants.find((p: any) => p.device_id !== targetId);
-          const name = other ? (other.username || other.device_name) : (chat.name || "Group Chat");
+          let name = chat.name || "Group Chat";
+          if (!chat.is_group) {
+            const other = chat.participants.find((p: any) => p.device_id !== targetId && p.username !== username);
+            name = other ? (other.username || other.device_name) : "Direct Chat";
+          }
           const time = chat.last_message ? new Date(chat.last_message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "New Chat";
           
           let snippet = "";
@@ -1290,12 +1497,12 @@ export default function Home() {
           };
         });
 
-        const hasGroupChat = formatted.some(c => c.name === "Group Chat");
+        const hasGroupChat = formatted.some(c => c.name === "Group Chat" || c.name === "Common Group");
         if (!hasGroupChat) {
           formatted.unshift({
-            name: "Group Chat",
-            time: "10:27 AM",
-            lastMsg: "Welcome to Group Chat",
+            name: "Common Group",
+            time: "Just now",
+            lastMsg: "Welcome to Common Group",
             unread: 0
           });
         }
@@ -1371,8 +1578,8 @@ export default function Home() {
       })
       .then((data: any[]) => {
         const formatted = data.map(t => {
-          const isSender = t.sender_details?.device_id === targetId;
-          const partner = isSender ? t.receiver_details : t.sender_details;
+          const isSender = t.sender_device?.device_id === targetId || (username && t.sender_device?.username === username);
+          const partner = isSender ? t.receiver_device : t.sender_device;
           const partnerName = partner ? (partner.username || partner.device_name) : "Unknown Device";
           const partnerIp = partner ? (partner.ip_address || "192.168.1.1") : "192.168.1.1";
           
@@ -1491,7 +1698,7 @@ export default function Home() {
       return;
     }
 
-    if (activeChat === "Group Chat" || activeChat === "Project-Group") {
+    if (activeChat === "Common Group" || activeChat === "Group Chat" || activeChat === "Project-Group") {
       fetch(getApiUrl("/chats/get_or_create_group"), {
         method: "POST",
         headers: { "Content-Type": "application/json" }
@@ -1502,18 +1709,26 @@ export default function Home() {
         fetch(getApiUrl(`/chats/${chatObj.id}/messages`))
           .then(res => res.json())
           .then((msgData: any[]) => {
+            const loggedInUserId = localStorage.getItem("fileshare_logged_in_userid") || "";
             const formatted = msgData
               .filter(m => !m.is_deleted && !deletedMessageIdsRef.current.includes(String(m.id)))
-              .map(m => ({
-                id: String(m.id),
-                sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
-                text: m.text,
-                time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                file: m.file,
-                file_name: m.file_name,
-                file_size: m.file_size,
-                file_type: m.file_type
-              }));
+              .map(m => {
+                const isYou = (m.sender_user_id && String(m.sender_user_id) === String(loggedInUserId)) || 
+                              (m.sender_name && m.sender_name === username) || 
+                              (m.sender_device_id && m.sender_device_id === deviceId);
+                return {
+                  id: String(m.id),
+                  sender: isYou ? "you" as const : "other" as const,
+                  sender_user_id: m.sender_user_id,
+                  text: m.text,
+                  time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  file: m.file,
+                  file_name: m.file_name,
+                  file_size: m.file_size,
+                  file_type: m.file_type,
+                  is_read: m.is_read
+                };
+              });
             setChatMessages(prev => ({
               ...prev,
               [activeChat]: formatted
@@ -1547,23 +1762,47 @@ export default function Home() {
           })
           .then(res => res.json())
           .then(chatObj => {
+            if (!chatObj || !chatObj.id) {
+              console.error("Failed to get or create chat:", chatObj);
+              return;
+            }
             setActiveChatId(chatObj.id);
+            
+            // Mark chat as read
+            fetch(getApiUrl(`/chats/${chatObj.id}/mark_as_read`), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ user_id: deviceId })
+            }).catch(() => {});
+
             // Fetch initial messages
             fetch(getApiUrl(`/chats/${chatObj.id}/messages`))
               .then(res => res.json())
-              .then((msgData: any[]) => {
+              .then((msgData: any) => {
+                if (!Array.isArray(msgData)) {
+                  console.error("Expected message list array, got:", msgData);
+                  return;
+                }
+                const loggedInUserId = localStorage.getItem("fileshare_logged_in_userid") || "";
                 const formatted = msgData
                   .filter(m => !m.is_deleted && !deletedMessageIdsRef.current.includes(String(m.id)))
-                  .map(m => ({
-                    id: String(m.id),
-                    sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
-                    text: m.text,
-                    time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    file: m.file,
-                    file_name: m.file_name,
-                    file_size: m.file_size,
-                    file_type: m.file_type
-                  }));
+                  .map(m => {
+                    const isYou = (m.sender_user_id && String(m.sender_user_id) === String(loggedInUserId)) || 
+                                  (m.sender_name && m.sender_name === username) || 
+                                  (m.sender_device_id && m.sender_device_id === deviceId);
+                    return {
+                      id: String(m.id),
+                      sender: isYou ? "you" as const : "other" as const,
+                      sender_user_id: m.sender_user_id,
+                      text: m.text,
+                      time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                      file: m.file,
+                      file_name: m.file_name,
+                      file_size: m.file_size,
+                      file_type: m.file_type,
+                      is_read: m.is_read
+                    };
+                  });
                 setChatMessages(prev => ({
                   ...prev,
                   [activeChat]: formatted
@@ -1582,18 +1821,24 @@ export default function Home() {
                   fetch(getApiUrl(`/chats/${match.id}/messages`))
                     .then(res => res.json())
                     .then((msgData: any[]) => {
+                      const loggedInUserId = localStorage.getItem("fileshare_logged_in_userid") || "";
                       const formatted = msgData
                         .filter(m => !m.is_deleted && !deletedMessageIdsRef.current.includes(String(m.id)))
-                        .map(m => ({
-                          id: String(m.id),
-                          sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
-                          text: m.text,
-                          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                          file: m.file,
-                          file_name: m.file_name,
-                          file_size: m.file_size,
-                          file_type: m.file_type
-                        }));
+                        .map(m => {
+                          const isYou = (m.sender_user_id && String(m.sender_user_id) === String(loggedInUserId)) || 
+                                        (m.sender_name && m.sender_name === username) || 
+                                        (m.sender_device_id && m.sender_device_id === deviceId);
+                          return {
+                            id: String(m.id),
+                            sender: isYou ? "you" as const : "other" as const,
+                            text: m.text,
+                            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                            file: m.file,
+                            file_name: m.file_name,
+                            file_size: m.file_size,
+                            file_type: m.file_type
+                          };
+                        });
                       setChatMessages(prev => ({
                         ...prev,
                         [activeChat]: formatted
@@ -1613,7 +1858,8 @@ export default function Home() {
 
     const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${hostname}:8000/ws/communication/${deviceId}/`;
+    const port = typeof window !== "undefined" && window.location.port ? `:${window.location.port}` : "";
+    const wsUrl = `${protocol}//${hostname}${port}/ws/communication/${deviceId}/`;
 
     console.log("Connecting WebSocket to:", wsUrl);
     const ws = new WebSocket(wsUrl);
@@ -1634,9 +1880,11 @@ export default function Home() {
           handleRefreshDevices();
         } else if (data.type === "chat_message") {
           const msg = data.message;
+          const loggedInUserId = localStorage.getItem("fileshare_logged_in_userid") || "";
           const formattedMsg = {
             id: String(msg.id),
-            sender: msg.sender_id === deviceId ? ("you" as const) : ("other" as const),
+            sender: String(msg.sender_user_id) === String(loggedInUserId) ? ("you" as const) : ("other" as const),
+            sender_user_id: msg.sender_user_id,
             text: msg.text,
             time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             file: msg.file,
@@ -1644,34 +1892,66 @@ export default function Home() {
             file_size: msg.file_size,
             file_type: msg.file_type,
             reply_to_text: msg.reply_to_text,
-            reply_to_sender: msg.reply_to_sender
+            reply_to_sender: msg.reply_to_sender,
+            is_read: msg.is_read
           };
 
 
-          // Play notification sound if message is from someone else and chat is inactive or window hidden
-          if (msg.sender_id !== deviceId) {
-            if (activeChatIdRef.current !== msg.chat_id || (typeof document !== "undefined" && document.hidden)) {
-              try {
-                const audio = new Audio('/notification.mp3');
-                audio.play().catch(e => console.log("Audio play deferred or blocked:", e));
-              } catch (e) {
-                console.error("Audio error:", e);
-              }
+          // Play notification sound if message is from someone else
+          if (String(msg.sender_user_id) !== String(loggedInUserId)) {
+            try {
+              const isChatActive = activeChatIdRef.current === msg.chat_id && (typeof document !== "undefined" && !document.hidden);
+              const soundFile = isChatActive ? '/tone.mp3' : '/notification.mp3';
+              const audio = new Audio(soundFile);
+              audio.play().catch(e => console.log("Audio play deferred or blocked:", e));
+            } catch (e) {
+              console.error("Audio error:", e);
             }
           }
 
           if (activeChatIdRef.current === msg.chat_id) {
+            // Mark as read immediately on server if we are the receiver
+            if (String(msg.sender_user_id) !== String(loggedInUserId)) {
+              fetch(getApiUrl(`/chats/${msg.chat_id}/mark_as_read`), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: deviceId })
+              }).catch(() => {});
+            }
+
             setChatMessages(prev => {
               const currentMessages = prev[activeChatRef.current] || [];
               if (currentMessages.some(m => m.id === formattedMsg.id)) return prev;
+              
+              // Filter out temporary optimistic message to prevent double bubbles
+              let filteredMessages = currentMessages;
+              if (String(msg.sender_user_id) === String(loggedInUserId)) {
+                const tempIdx = currentMessages.findIndex(m => m.id.startsWith("temp-") && m.text === formattedMsg.text);
+                if (tempIdx !== -1) {
+                  filteredMessages = currentMessages.filter((_, idx) => idx !== tempIdx);
+                }
+              }
+
               return {
                 ...prev,
-                [activeChatRef.current]: [...currentMessages, formattedMsg]
+                [activeChatRef.current]: [...filteredMessages, { ...formattedMsg, is_read: String(msg.sender_user_id) !== String(loggedInUserId) }]
               };
             });
           }
           loadRecentChats();
+        } else if (data.type === "read_receipt") {
+          const { message_id } = data;
+          setChatMessages(prev => {
+            const next = { ...prev };
+            Object.keys(next).forEach(chatName => {
+              next[chatName] = next[chatName].map(m => 
+                m.id === String(message_id) ? { ...m, is_read: true } : m
+              );
+            });
+            return next;
+          });
         } else if (data.type === "typing") {
+          console.log("Received typing event:", data, "activeChatId:", activeChatIdRef.current, "activeChat:", activeChatRef.current);
           if (data.sender_id !== deviceId) {
             fetch(getApiUrl("/devices/online_devices"))
               .then(res => res.json())
@@ -1679,11 +1959,16 @@ export default function Home() {
                 const typingUserObj = devicesList.find(d => d.device_id === data.sender_id);
                 if (typingUserObj) {
                   const displayName = (typingUserObj.username && typingUserObj.username.trim() !== "" && typingUserObj.username !== "You") ? typingUserObj.username : typingUserObj.device_name;
-                  if (activeChatRef.current === displayName) {
+                  
+                  const isCurrentChat = data.chat_id 
+                    ? String(data.chat_id) === String(activeChatIdRef.current)
+                    : activeChatRef.current === displayName;
+
+                  if (isCurrentChat) {
                     if (data.is_typing) {
-                      setTypingUsers([displayName]);
+                      setTypingUsers(prev => prev.includes(displayName) ? prev : [...prev, displayName]);
                     } else {
-                      setTypingUsers([]);
+                      setTypingUsers(prev => prev.filter(name => name !== displayName));
                     }
                   }
                 }
@@ -1732,18 +2017,25 @@ export default function Home() {
       fetch(getApiUrl(`/chats/${activeChatId}/messages`))
         .then(res => res.json())
         .then((msgData: any[]) => {
+          const loggedInUserId = localStorage.getItem("fileshare_logged_in_userid") || "";
           const formatted = msgData
             .filter(m => !m.is_deleted && !deletedMessageIdsRef.current.includes(String(m.id)))
-            .map(m => ({
-              id: String(m.id),
-              sender: m.sender_device_id === deviceId ? "you" as const : "other" as const,
-              text: m.text,
-              time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              file: m.file,
-              file_name: m.file_name,
-              file_size: m.file_size,
-              file_type: m.file_type
-            }));
+            .map(m => {
+              const isYou = (m.sender_user_id && String(m.sender_user_id) === String(loggedInUserId)) || 
+                            (m.sender_name && m.sender_name === username) || 
+                            (m.sender_device_id && m.sender_device_id === deviceId);
+              return {
+                id: String(m.id),
+                sender: isYou ? "you" as const : "other" as const,
+                text: m.text,
+                time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                file: m.file,
+                file_name: m.file_name,
+                file_size: m.file_size,
+                file_type: m.file_type,
+                is_read: m.is_read
+              };
+            });
 
           setChatMessages(prev => ({
             ...prev,
@@ -1765,31 +2057,20 @@ export default function Home() {
     }, 4000);
     return () => clearInterval(interval);
   }, [deviceId, activePage]);
-
-  // Handle local typing triggers over WebSocket
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMessageInput(e.target.value);
     
-    if (activeChatId) {
-      fetch(getApiUrl("/devices/online_devices"))
-        .then(res => res.json())
-        .then((devicesList: any[]) => {
-          const targetDevice = devicesList.find(d => {
-            const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
-            return displayName === activeChat;
-          });
-
-          if (targetDevice && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            if (!isTypingLocal) {
-              setIsTypingLocal(true);
-              wsRef.current.send(JSON.stringify({
-                type: "typing",
-                target_id: targetDevice.device_id,
-                is_typing: true
-              }));
-            }
-          }
-        });
+    console.log("handleInputChange - value:", e.target.value, "activeChatId:", activeChatId, "ws status:", wsRef.current?.readyState);
+    if (activeChatId && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      if (!isTypingLocal) {
+        setIsTypingLocal(true);
+        console.log("Sending typing start event over WS...");
+        wsRef.current.send(JSON.stringify({
+          type: "typing",
+          chat_id: activeChatId,
+          is_typing: true
+        }));
+      }
     }
   };
 
@@ -1798,21 +2079,13 @@ export default function Home() {
     const clearTyping = () => {
       if (isTypingLocal && activeChatId) {
         setIsTypingLocal(false);
-        fetch(getApiUrl("/devices/online_devices"))
-          .then(res => res.json())
-          .then((devicesList: any[]) => {
-            const targetDevice = devicesList.find(d => {
-              const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
-              return displayName === activeChat;
-            });
-            if (targetDevice && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({
-                type: "typing",
-                target_id: targetDevice.device_id,
-                is_typing: false
-              }));
-            }
-          });
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
+            type: "typing",
+            chat_id: activeChatId,
+            is_typing: false
+          }));
+        }
       }
     };
 
@@ -1825,7 +2098,7 @@ export default function Home() {
     }, 3000);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [messageInput, isTypingLocal, activeChatId, activeChat]);
+  }, [messageInput, isTypingLocal, activeChatId]);
 
   const handleSendMessage = () => {
     if (!messageInput.trim()) return;
@@ -1855,39 +2128,25 @@ export default function Home() {
       };
     });
 
-    fetch(getApiUrl("/devices/online_devices"))
-      .then(res => res.json())
-      .then((data: any[]) => {
-        const targetDevice = data.find(d => {
-          const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
-          return displayName === activeChat;
-        });
-
-        if (targetDevice) {
-          // If WebSocket is open, send via WebSocket instantly
-          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
-              type: "chat_message",
-              target_id: targetDevice.device_id,
-              chat_id: activeChatId,
-              text: inputVal,
-              ...replyData
-            }));
-          } else {
-            // Fallback to HTTP POST
-            fetch(getApiUrl(`/chats/${activeChatId}/send_message`), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                sender_id: deviceId,
-                text: inputVal,
-                ...replyData
-              })
-            })
-            .catch(() => {});
-          }
-        }
-      });
+    // Send via WebSocket if available, otherwise fallback to HTTP POST
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: "chat_message",
+        chat_id: activeChatId,
+        text: inputVal,
+        ...replyData
+      }));
+    } else if (activeChatId) {
+      fetch(getApiUrl(`/chats/${activeChatId}/send_message`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sender_id: deviceId,
+          text: inputVal,
+          ...replyData
+        })
+      }).catch(() => {});
+    }
   };
 
 
@@ -1895,8 +2154,13 @@ export default function Home() {
     try {
       let pc = p2pFilePeerConnectionsRef.current[senderId];
       if (!pc || pc.signalingState === "closed") {
+        const currentHost = typeof window !== "undefined" ? window.location.hostname : "localhost";
         pc = new RTCPeerConnection({
-          iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+          iceServers: [
+            { urls: `turn:${currentHost}:3478?transport=udp`, username: "fileshare", credential: "fileshare_password" },
+            { urls: `turn:${currentHost}:3478?transport=tcp`, username: "fileshare", credential: "fileshare_password" },
+            { urls: "stun:stun.l.google.com:19302" }
+          ]
         });
         p2pFilePeerConnectionsRef.current[senderId] = pc;
 
@@ -2190,12 +2454,9 @@ export default function Home() {
   };
 
   const handlePreviewFile = (fileName: string, fileType?: string, customUrl?: string) => {
-    const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
     let url = customUrl;
     if (!url) {
-      url = `http://${hostname}:8000/media/chat_attachments/${fileName}`;
-    } else if (url.startsWith("/")) {
-      url = `http://${hostname}:8000${url}`;
+      url = `/media/chat_attachments/${fileName}`;
     }
     setLightboxData({
       url,
@@ -2212,12 +2473,9 @@ export default function Home() {
     const isImage = ["jpg", "png", "jpeg", "webp", "gif", "svg", "image"].includes(typeLower) ||
                     ["jpg", "png", "jpeg", "webp", "gif", "svg"].includes(ext);
 
-    const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
     let src = customUrl;
     if (!src) {
-      src = `http://${hostname}:8000/media/chat_attachments/${fileName}`;
-    } else if (src.startsWith("/")) {
-      src = `http://${hostname}:8000${src}`;
+      src = `/media/chat_attachments/${fileName}`;
     }
 
     if (isImage) {
@@ -2243,7 +2501,7 @@ export default function Home() {
             alt={fileName} 
             onError={(e) => {
               const target = e.currentTarget;
-              const directMedia = `http://${hostname}:8000/media/${fileName}`;
+              const directMedia = `/media/${fileName}`;
               if (target.src !== directMedia && target.src.includes("/chat_attachments/")) {
                 target.src = directMedia;
               } else {
@@ -3336,7 +3594,7 @@ export default function Home() {
         {/* Left Sub-sidebar (Devices & Recent Chats) */}
         <div className={`${styles.chatSidebar} ${hasActiveChat ? styles.chatSidebarHiddenMobile : ""}`}>
           <div className={styles.chatSidebarHeader}>
-            <span className={styles.chatSidebarTitle}>Nearby Devices</span>
+            <span className={styles.chatSidebarTitle}>Chats & Groups</span>
             <motion.button
               layout
               type="button"
@@ -3392,22 +3650,101 @@ export default function Home() {
           </div>
           
           <div className={styles.chatSidebarScroll}>
-            {/* Nearby Devices Section */}
+            {/* Nearby Devices & Groups Section */}
             <div className={styles.chatSidebarSection}>
+              {/* Common Group Card */}
+              {(() => {
+                const groupMsgs = chatMessages["Common Group"] || chatMessages["Group Chat"] || [];
+                const lastGroupMsg = groupMsgs.length > 0 ? groupMsgs[groupMsgs.length - 1] : null;
+                const isGroupActive = activeChat === "Common Group" || activeChat === "Group Chat";
+                
+                let groupSnippet = "Public Group Chat";
+                let groupTime = "";
+                if (lastGroupMsg) {
+                  groupTime = lastGroupMsg.time || "";
+                  let prefix = lastGroupMsg.sender === "you" ? (lastGroupMsg.is_read ? "✓✓ " : "✓ ") : "";
+                  if (lastGroupMsg.file) {
+                    groupSnippet = prefix + "📄 " + (lastGroupMsg.file_name || "Attachment");
+                  } else if (lastGroupMsg.text) {
+                    groupSnippet = prefix + lastGroupMsg.text;
+                  }
+                }
+
+                return (
+                  <button
+                    type="button"
+                    className={`${styles.chatDeviceItem} ${isGroupActive ? styles.chatDeviceActive : ""}`}
+                    onClick={() => setActiveChat("Common Group")}
+                    style={{ width: "100%", padding: "10px 12px", marginBottom: "6px" }}
+                  >
+                    <div className={styles.chatDeviceLeft} style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
+                      <div style={{ position: "relative", flexShrink: 0 }}>
+                        <div style={{ width: "42px", height: "42px", borderRadius: "50%", backgroundColor: "#8B5CF6", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "16px", boxShadow: "0 2px 8px rgba(139, 92, 246, 0.4)" }}>
+                          <Users size={20} />
+                        </div>
+                      </div>
+                      <div className={styles.chatDeviceDetails} style={{ flex: 1, overflow: "hidden", textAlign: "left" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                          <span className={styles.chatDeviceName} style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)" }}>Common Group</span>
+                          {groupTime && <span style={{ fontSize: "11px", color: "var(--text-secondary)", opacity: 0.8 }}>{groupTime}</span>}
+                        </div>
+                        <span className={styles.chatDeviceIp} style={{ fontSize: "12.5px", color: "var(--primary-muted)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", marginTop: "2px" }}>
+                          {groupSnippet}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })()}
+
               {nearbyDevices.map((device, index) => {
                 const initial = device.name ? device.name.charAt(0).toUpperCase() : "?";
                 const colors = ["#6C63FF", "#3B82F6", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6"];
                 const bgColor = colors[(device.name ? device.name.charCodeAt(0) : 0) % colors.length];
+                
+                const msgs = chatMessages[device.name] || [];
+                const lastMsgObj = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+                const isContactTyping = typingUsers.includes(device.name);
+
+                let snippetContent = device.ip || "192.168.1.1";
+                let timeStr = "";
+
+                if (isContactTyping) {
+                  snippetContent = "typing...";
+                } else if (lastMsgObj) {
+                  timeStr = lastMsgObj.time || "";
+                  let prefix = "";
+                  if (lastMsgObj.sender === "you") {
+                    prefix = lastMsgObj.is_read ? "✓✓ " : "✓ ";
+                  }
+                  if (lastMsgObj.file) {
+                    const fType = (lastMsgObj.file_type || "").toLowerCase();
+                    const fName = (lastMsgObj.file_name || "").toLowerCase();
+                    if (fType.includes("audio") || fName.endsWith("mp3") || fName.endsWith("wav") || fName.endsWith("m4a")) {
+                      snippetContent = prefix + "🎵 Audio";
+                    } else if (fType.includes("image") || ["jpg", "png", "jpeg", "webp"].some(ext => fName.endsWith(ext))) {
+                      snippetContent = prefix + "📷 Photo";
+                    } else if (fType.includes("video") || fName.endsWith("mp4")) {
+                      snippetContent = prefix + "🎥 Video";
+                    } else {
+                      snippetContent = prefix + "📄 " + (lastMsgObj.file_name || "Attachment");
+                    }
+                  } else if (lastMsgObj.text) {
+                    snippetContent = prefix + lastMsgObj.text;
+                  }
+                }
+
                 return (
                   <button
                     key={`${device.name}-${device.ip}-${index}`}
                     type="button"
                     className={`${styles.chatDeviceItem} ${activeChat === device.name ? styles.chatDeviceActive : ""}`}
                     onClick={() => setActiveChat(device.name)}
+                    style={{ width: "100%", padding: "10px 12px" }}
                   >
-                    <div className={styles.chatDeviceLeft} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div className={styles.chatDeviceLeft} style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
                       <div style={{ position: "relative", flexShrink: 0 }}>
-                        <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: bgColor, color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "15px", boxShadow: "0 2px 6px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+                        <div style={{ width: "42px", height: "42px", borderRadius: "50%", backgroundColor: bgColor, color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "16px", boxShadow: "0 2px 6px rgba(0,0,0,0.2)", overflow: "hidden" }}>
                           {((device.avatar && device.avatar !== "avatar_1") ? device.avatar : peerAvatars[device.name]) ? (
                             <img src={(device.avatar && device.avatar !== "avatar_1") ? device.avatar : peerAvatars[device.name]} alt={device.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                           ) : (
@@ -3428,14 +3765,16 @@ export default function Home() {
                           }}
                         />
                       </div>
-                      <div className={styles.chatDeviceDetails}>
-                        <span className={styles.chatDeviceName}>{device.name}</span>
-                        <span className={styles.chatDeviceIp}>{device.ip}</span>
+                      <div className={styles.chatDeviceDetails} style={{ flex: 1, overflow: "hidden", textAlign: "left" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                          <span className={styles.chatDeviceName} style={{ fontWeight: 600, fontSize: "14px", color: "var(--text-primary)" }}>{device.name}</span>
+                          {timeStr && <span style={{ fontSize: "11px", color: "var(--text-secondary)", opacity: 0.8 }}>{timeStr}</span>}
+                        </div>
+                        <span className={styles.chatDeviceIp} style={{ fontSize: "12.5px", color: isContactTyping ? "#10B981" : "var(--text-secondary)", fontWeight: isContactTyping ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", marginTop: "2px" }}>
+                          {snippetContent}
+                        </span>
                       </div>
                     </div>
-                    {device.status === "offline" && (
-                      <span className={styles.chatDeviceRight}>Offline</span>
-                    )}
                   </button>
                 );
               })}
@@ -3552,20 +3891,20 @@ export default function Home() {
                     <div 
                       className={styles.chatPanelInfo} 
                       onClick={() => {
-                        if (activeChat === "Group Chat" || activeChat === "Project-Group") {
+                        if (activeChat === "Common Group" || activeChat === "Group Chat" || activeChat === "Project-Group") {
                           setIsGroupInfoModalOpen(true);
                         } else {
                           setIsChatWallpaperModalOpen(true);
                         }
                       }} 
                       style={{ cursor: "pointer" }} 
-                      title={activeChat === "Group Chat" || activeChat === "Project-Group" ? "Click for Group Info" : "Click for Wallpaper & Info"}
+                      title={activeChat === "Common Group" || activeChat === "Group Chat" || activeChat === "Project-Group" ? "Click for Group Info" : "Click for Wallpaper & Info"}
                     >
                       <span className={styles.chatPanelName}>{activeChat}</span>
                       <span className={styles.chatPanelStatus}>
                         {typingUsers.includes(activeChat) ? (
                           <span style={{ color: "var(--primary)", fontWeight: "600" }}>typing...</span>
-                        ) : activeChat === "Group Chat" || activeChat === "Project-Group" ? (
+                        ) : activeChat === "Common Group" || activeChat === "Group Chat" || activeChat === "Project-Group" ? (
                           <span style={{ color: "var(--primary)", fontWeight: "600" }}>{nearbyDevices.length + 1} Participants • Tap for info</span>
                         ) : (
                           <>
@@ -3582,7 +3921,7 @@ export default function Home() {
                       className={styles.controlButton} 
                       title="Group Info / Wallpaper" 
                       onClick={() => {
-                        if (activeChat === "Group Chat" || activeChat === "Project-Group") {
+                        if (activeChat === "Common Group" || activeChat === "Group Chat" || activeChat === "Project-Group") {
                           setIsGroupInfoModalOpen(true);
                         } else {
                           setIsChatWallpaperModalOpen(true);
@@ -3606,8 +3945,37 @@ export default function Home() {
             <div ref={chatBodyRef} className={styles.chatPanelBody} style={{ flex: 1, overflowY: "auto", position: "relative", zIndex: 1 }}>
               <span className={styles.chatDaySeparator}>Today</span>
 
-              {activeMessages.map((msg) => {
-                const isSelected = selectedMessageIds.includes(msg.id);
+              {(() => {
+                const renderTicks = (m: ChatMessage) => {
+                  if (m.sender !== "you") return null;
+
+                  if (activeChat === "Common Group" || activeChat === "Group Chat" || activeChat === "Project-Group") {
+                    return <span style={{ color: "rgba(255,255,255,0.45)", fontSize: "10px", marginLeft: "6px", textTransform: "lowercase" }}>• sent</span>;
+                  }
+
+                  const recipientName = activeChat;
+                  const isRecipientOnline = nearbyDevices.some(d => {
+                    const displayName = d.name;
+                    return displayName === recipientName;
+                  });
+
+                  if (m.id.startsWith("temp-")) {
+                    return <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "10px", marginLeft: "6px", textTransform: "lowercase" }}>• sending</span>;
+                  }
+
+                  if (m.is_read) {
+                    return <span style={{ color: "#7DF9FF", fontWeight: "600", fontSize: "10px", marginLeft: "6px", textTransform: "lowercase" }}>• read</span>;
+                  }
+
+                  if (isRecipientOnline) {
+                    return <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "10px", marginLeft: "6px", textTransform: "lowercase" }}>• delivered</span>;
+                  }
+
+                  return <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "10px", marginLeft: "6px", textTransform: "lowercase" }}>• sent</span>;
+                };
+
+                return activeMessages.map((msg) => {
+                  const isSelected = selectedMessageIds.includes(msg.id);
                 return (
                   <div
                     key={msg.id}
@@ -3658,54 +4026,11 @@ export default function Home() {
 
                     {msg.text && <span style={{ flex: 1 }}>{msg.text}</span>}
                     
-                    {/* Action Bar for Message Bubbles */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", opacity: 0.8, marginLeft: "auto", paddingLeft: "8px" }}>
-                      {starredMessageIds.includes(msg.id) && (
+                    {starredMessageIds.includes(msg.id) && (
+                      <div style={{ marginLeft: "auto", paddingLeft: "8px" }}>
                         <Star size={12} style={{ fill: "#F59E0B", color: "#F59E0B" }} />
-                      )}
-
-                      {msg.sender === "you" && msg.text && (
-                        <button
-                          type="button"
-                          title="Edit message"
-                          onClick={() => {
-                            const newText = prompt("Edit your message:", msg.text);
-                            if (newText !== null && newText.trim() !== "") {
-                              handleEditMessage(msg.id, newText, activeChat);
-                            }
-                          }}
-                          style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7, padding: 0 }}
-                        >
-                          <Edit3 size={13} />
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        title="Forward message"
-                        onClick={() => {
-                          setLightboxData({
-                            url: msg.file || "",
-                            fileName: msg.file_name || "message text",
-                            messageId: msg.id,
-                            chatName: activeChat
-                          });
-                          setIsShareModalOpen(true);
-                        }}
-                        style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7, padding: 0 }}
-                      >
-                        <Share2 size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        title="Delete message"
-                        onClick={() => handleDeleteMessage(msg.id, activeChat)}
-                        style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7, padding: 0 }}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-
-                    </div>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Real File Attachment Card */}
@@ -3714,7 +4039,7 @@ export default function Home() {
                       const isImg = msg.file_type?.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(msg.file_name || "");
                       const isVideo = msg.file_type?.startsWith("video/") || /\.(mp4|mov|m4v|avi|mkv|webm)$/i.test(msg.file_name || "");
                       const isAudio = msg.file_type?.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|aac)$/i.test(msg.file_name || "");
-                      const fileUrl = msg.file.startsWith("http") ? msg.file : `http://${window.location.hostname}:8000${msg.file}`;
+                      const fileUrl = msg.file.startsWith("http") ? msg.file : msg.file;
                       
                       if (isImg) {
                         return (
@@ -3808,12 +4133,46 @@ export default function Home() {
                   )}
                   
                   <span className={styles.chatBubbleTime}>
-                    {msg.time} {msg.sender === "you" && " ✓✓"}
+                    {msg.time} {renderTicks(msg)}
                   </span>
                 </div>
               );
-            })}
+            })
+          })()}
 
+          {typingUsers.includes(activeChat) && (
+            <div
+              className={`${styles.chatBubble} ${styles.chatBubbleIncoming}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                padding: "18px 20px",
+                borderRadius: "16px 16px 16px 4px",
+                marginBottom: "12px",
+                width: "fit-content",
+                boxShadow: "0 2px 6px rgba(0,0,0,0.2)"
+              }}
+            >
+              <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                <motion.span 
+                  animate={{ y: [0, -5, 0], opacity: [0.5, 1, 0.5] }} 
+                  transition={{ repeat: Infinity, duration: 1.2, delay: 0, ease: "easeInOut" }}
+                  style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "rgba(255, 255, 255, 0.8)", display: "inline-block" }} 
+                />
+                <motion.span 
+                  animate={{ y: [0, -5, 0], opacity: [0.5, 1, 0.5] }} 
+                  transition={{ repeat: Infinity, duration: 1.2, delay: 0.18, ease: "easeInOut" }}
+                  style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "rgba(255, 255, 255, 0.8)", display: "inline-block" }} 
+                />
+                <motion.span 
+                  animate={{ y: [0, -5, 0], opacity: [0.5, 1, 0.5] }} 
+                  transition={{ repeat: Infinity, duration: 1.2, delay: 0.36, ease: "easeInOut" }}
+                  style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "rgba(255, 255, 255, 0.8)", display: "inline-block" }} 
+                />
+              </div>
+            </div>
+          )}
 
               {/* Scroll Anchor */}
               <div ref={messagesEndRef} />
@@ -3834,19 +4193,6 @@ export default function Home() {
                 <button type="button" onClick={() => setReplyingTo(null)} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}>
                   <X size={16} />
                 </button>
-              </div>
-            )}
-            {typingUsers.length > 0 && (
-
-              <div className={styles.chatTypingIndicator}>
-                <div className={styles.chatTypingDots}>
-                  <span />
-                  <span />
-                  <span />
-                </div>
-                <span className={styles.chatTypingText}>
-                  {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing...
-                </span>
               </div>
             )}
             <div className={styles.chatInputWrapper} style={{ position: "relative" }}>
@@ -4167,10 +4513,6 @@ export default function Home() {
         if (starredMessageIds.includes(m.id)) {
           let cat: "Images" | "Documents" | "Videos" | "Audio" | "Messages" | "Files" = "Messages";
           let fUrl = m.file;
-          if (fUrl && !fUrl.startsWith("http")) {
-            const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
-            fUrl = `http://${hostname}:8000${fUrl}`;
-          }
 
           if (m.file) {
             const ext = (m.file_name || "").split('.').pop()?.toLowerCase() || "";
@@ -4483,16 +4825,21 @@ export default function Home() {
     const recentlySeenCount = devicesList.filter(d => d.lastSeen.includes("min") || d.lastSeen.includes("now") || d.lastSeen.includes("Just now")).length;
     const blockedCount = 0;
 
-    const osIcon = (type: string) => {
-      switch (type.toLowerCase()) {
-        case "windows":
-          return <Laptop size={16} style={{ color: "#0078d7" }} />;
-        case "android":
-          return <Smartphone size={16} style={{ color: "#3ddc84" }} />;
-        case "ios":
-          return <Smartphone size={16} style={{ color: "#a2aaad" }} />;
-        default:
-          return <Monitor size={16} style={{ color: "var(--text-secondary)" }} />;
+    const osIcon = (type: string, name: string = "") => {
+      const lowerType = (type || "").toLowerCase();
+      const lowerName = (name || "").toLowerCase();
+      
+      if (lowerType.includes("/")) {
+        return <Monitor size={16} style={{ color: "#8b5cf6" }} />;
+      } else if (lowerType === "mobile" || lowerType === "phone" || lowerType === "android") {
+        return <Smartphone size={16} style={{ color: lowerName.includes("iphone") ? "#a2aaad" : "#3ddc84" }} />;
+      } else if (lowerType === "tablet" || lowerType === "ios") {
+        return <Smartphone size={16} style={{ color: "#3b82f6" }} />;
+      } else {
+        if (lowerName.includes("macbook") || lowerName.includes("mac")) {
+          return <Laptop size={16} style={{ color: "#a2aaad" }} />;
+        }
+        return <Laptop size={16} style={{ color: "#0078d7" }} />;
       }
     };
 
@@ -4613,7 +4960,7 @@ export default function Home() {
                         <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                             <div className={styles.tableDeviceIconWrapper}>
-                              {osIcon(device.type)}
+                              {osIcon(device.type, device.name)}
                             </div>
                             {device.name}
                           </div>
@@ -4680,7 +5027,7 @@ export default function Home() {
                         <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                             <div className={styles.tableDeviceIconWrapper} style={{ opacity: 0.6 }}>
-                              {osIcon(device.type)}
+                              {osIcon(device.type, device.name)}
                             </div>
                             {device.name}
                           </div>
@@ -4784,7 +5131,12 @@ export default function Home() {
               </div>
               <div className={styles.settingsProfileInfo} style={{ alignItems: "center", marginTop: "12px" }}>
                 <span className={styles.settingsProfileName}>{username}</span>
-                <span className={styles.settingsProfileDevice}>{deviceName}</span>
+                {typeof window !== "undefined" && localStorage.getItem("fileshare_logged_in_email") && (
+                  <span style={{ fontSize: "12.5px", color: "var(--text-secondary)", marginTop: "2px", opacity: 0.8 }}>
+                    {localStorage.getItem("fileshare_logged_in_email")}
+                  </span>
+                )}
+                <span className={styles.settingsProfileDevice} style={{ marginTop: "4px" }}>{deviceName}</span>
               </div>
               <button 
                 className={styles.scanBtn} 
@@ -4879,6 +5231,42 @@ export default function Home() {
                       />
                       <span className={styles.switchSlider} />
                     </label>
+                  </div>
+                </div>
+
+                {/* Account Section */}
+                <span className={styles.settingsGroupTitle} style={{ marginTop: "24px" }}>Account Session</span>
+                <div className={styles.settingsCard}>
+                  <div className={styles.settingsRow}>
+                    <div className={styles.settingsRowLeft}>
+                      <span className={styles.settingsRowTitle}>Logged in as {username}</span>
+                      <span className={styles.settingsRowDesc}>Manage your current offline session</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fetch(getApiUrl("/auth/logout"), { method: "POST" })
+                          .finally(() => {
+                            localStorage.removeItem("fileshare_logged_in_user");
+                            localStorage.removeItem("username");
+                            setUsername("You");
+                            setIsLoggedIn(false);
+                            toast.info("Logged out successfully");
+                          });
+                      }}
+                      style={{
+                        backgroundColor: "#EF4444",
+                        color: "#FFF",
+                        border: "none",
+                        padding: "8px 16px",
+                        borderRadius: "8px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Log Out
+                    </button>
                   </div>
                 </div>
 
@@ -5116,7 +5504,9 @@ export default function Home() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setIsWatchingScreen(true)}
+                    onClick={() => {
+                      setIsWatchingScreen(true);
+                    }}
                     style={{ display: "flex", alignItems: "center", gap: "8px", padding: "12px 24px", borderRadius: "10px", backgroundColor: "var(--primary)", color: "#FFFFFF", border: "none", fontSize: "14px", fontWeight: 700, cursor: "pointer", boxShadow: "0 6px 20px rgba(108, 99, 255, 0.4)" }}
                   >
                     <Play size={18} style={{ fill: "#FFFFFF" }} />
@@ -5202,9 +5592,714 @@ export default function Home() {
     }
   };
 
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    const endpoint = isRegistering ? "/api/auth/register" : "/api/auth/login";
+    
+    // Auto detect device details
+    const ua = navigator.userAgent;
+    let detectedType = "desktop";
+    let detectedName = "Windows PC";
+    if (/android/i.test(ua)) {
+      detectedType = "mobile";
+      detectedName = "Android Phone";
+    } else if (/iPad|iPhone|iPod/.test(ua)) {
+      detectedType = "mobile";
+      detectedName = "iPhone";
+    } else if (/Macintosh/i.test(ua)) {
+      detectedName = "Macbook";
+    } else if (/Linux/i.test(ua)) {
+      detectedName = "Linux PC";
+    }
+
+    try {
+      const payload = isRegistering ? {
+        username: authName,
+        email: authEmail,
+        password: loginPassword,
+        device_id: deviceId,
+        device_name: deviceName || detectedName,
+        device_type: detectedType
+      } : {
+        email: authEmail,
+        password: loginPassword,
+        device_id: deviceId,
+        device_name: deviceName || detectedName,
+        device_type: detectedType
+      };
+
+      const res = await fetch(getApiUrl(isRegistering ? "/auth/register" : "/auth/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || "Authentication failed");
+        return;
+      }
+      
+      const loggedInUsername = data.user?.username || authName || authEmail;
+      const loggedInEmail = data.user?.email || authEmail;
+
+      // Save credentials locally
+      localStorage.setItem("fileshare_logged_in_userid", String(data.user?.id || ""));
+      localStorage.setItem("fileshare_logged_in_user", loggedInUsername);
+      localStorage.setItem("fileshare_logged_in_email", loggedInEmail);
+      localStorage.setItem("username", loggedInUsername);
+      localStorage.setItem("deviceName", deviceName || detectedName);
+      setUsername(loggedInUsername);
+      setIsLoggedIn(true);
+
+      if (data.user?.profile_completed) {
+        localStorage.setItem("fileshare_profile_completed", "true");
+        if (data.user?.avatar) {
+          setUserCustomAvatar(data.user.avatar);
+          localStorage.setItem("userCustomAvatar", data.user.avatar);
+        }
+      } else {
+        const isProfileDone = localStorage.getItem("fileshare_profile_completed");
+        if (!isProfileDone) {
+          setSetupDeviceName(deviceName || detectedName);
+          setShowProfileSetupModal(true);
+        }
+      }
+      toast.success(isRegistering ? "Registration successful!" : "Logged in successfully!");
+    } catch (err) {
+      setAuthError("Failed to connect to backend server");
+    }
+  };
+
+  const renderLoginScreen = () => {
+    return (
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "100vh",
+        background: "radial-gradient(circle at top right, #1E1B4B, #0F172A, #020617)",
+        fontFamily: "'Outfit', 'Inter', sans-serif",
+        padding: "20px"
+      }}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          style={{
+            width: "100%",
+            maxWidth: isQuickDownloader ? "600px" : "420px",
+            background: "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(24px)",
+            borderRadius: "24px",
+            border: "1px solid rgba(99, 102, 241, 0.15)",
+            padding: "40px 32px",
+            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)",
+            color: "#F8FAFC",
+            transition: "max-width 0.3s ease"
+          }}
+        >
+          {isQuickDownloader ? (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsQuickDownloader(false)}
+                  style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", color: "#94A3B8", cursor: "pointer", fontSize: "14px", fontWeight: 600 }}
+                >
+                  <ArrowLeft size={16} />
+                  <span>Back to Login</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={fetchPublicFiles}
+                  disabled={isFetchingPublicFiles}
+                  style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(99, 102, 241, 0.1)", border: "1px solid rgba(99, 102, 241, 0.3)", borderRadius: "8px", padding: "6px 12px", color: "#818CF8", cursor: "pointer", fontSize: "12px", fontWeight: 700 }}
+                >
+                  <RefreshCw size={14} className={isFetchingPublicFiles ? "animate-spin" : ""} />
+                  <span>Refresh</span>
+                </button>
+              </div>
+
+              <div style={{ textAlign: "center", marginBottom: "24px" }}>
+                <h3 style={{ margin: 0, fontSize: "24px", fontWeight: 800, color: "#FFF", background: "linear-gradient(to right, #FFF, #C7D2FE)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Quick Downloader</h3>
+                <p style={{ margin: "6px 0 0 0", fontSize: "14px", color: "#94A3B8" }}>Download shared files on this server without an account</p>
+              </div>
+
+              {/* Search Bar */}
+              <div style={{ position: "relative", marginBottom: "20px" }}>
+                <Search size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748B" }} />
+                <input
+                  type="text"
+                  placeholder="Search shared files by name..."
+                  value={publicSearchQuery}
+                  onChange={(e) => setPublicSearchQuery(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px 12px 42px",
+                    background: "rgba(2, 6, 23, 0.5)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    borderRadius: "12px",
+                    color: "#FFF",
+                    fontSize: "14px",
+                    outline: "none"
+                  }}
+                />
+              </div>
+
+              {/* File List */}
+              <div style={{ maxHeight: "350px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px", paddingRight: "4px" }}>
+                {isFetchingPublicFiles ? (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyItems: "center", padding: "40px 0", color: "#94A3B8" }}>
+                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "#6366F1", animation: "spin 1s linear infinite", marginBottom: "12px" }}></div>
+                    <span style={{ fontSize: "14px" }}>Loading shared files...</span>
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                  </div>
+                ) : (
+                  (() => {
+                    const filtered = publicFiles.filter(f => f.file_name.toLowerCase().includes(publicSearchQuery.toLowerCase()));
+                    if (filtered.length === 0) {
+                      return (
+                        <div style={{ textAlign: "center", padding: "40px 0", color: "#64748B", fontSize: "14px" }}>
+                          No shared files found on the server.
+                        </div>
+                      );
+                    }
+                    return filtered.map((file) => {
+                      const ext = file.file_name.split('.').pop()?.toLowerCase() || "";
+                      const fileDownloadUrl = getApiUrl(`/transfers/${file.id}/public_download_file`);
+
+                      let thumbnailElement = null;
+                      const isImage = ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext);
+                      const isVideo = ["mp4", "webm", "mov", "mkv"].includes(ext);
+                      const isAudio = ["mp3", "wav", "ogg", "m4a", "flac", "aac"].includes(ext);
+
+                      if (isImage) {
+                        thumbnailElement = (
+                          <img 
+                            src={fileDownloadUrl} 
+                            alt={file.file_name}
+                            style={{ width: "42px", height: "42px", objectFit: "cover", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)", flexShrink: 0 }} 
+                          />
+                        );
+                      } else if (isVideo) {
+                        thumbnailElement = (
+                          <div style={{ position: "relative", width: "42px", height: "42px", flexShrink: 0 }}>
+                            <video 
+                              src={fileDownloadUrl} 
+                              muted
+                              playsInline
+                              preload="metadata"
+                              style={{ width: "42px", height: "42px", objectFit: "cover", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)", backgroundColor: "#000" }} 
+                              onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
+                              onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                            />
+                            <Play size={14} style={{ position: "absolute", bottom: "2px", right: "2px", color: "#FFF", fill: "#FFF", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
+                          </div>
+                        );
+                      } else if (isAudio) {
+                        const isThisPlaying = playingAudioId === file.id;
+                        thumbnailElement = (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleAudioPreview(file.id, fileDownloadUrl)}
+                            style={{
+                              width: "42px", height: "42px", borderRadius: "12px", flexShrink: 0,
+                              backgroundColor: isThisPlaying ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                              color: isThisPlaying ? "#10B981" : "#F59E0B",
+                              border: "none", display: "flex", alignItems: "center", justifyContent: "center",
+                              cursor: "pointer", transition: "all 0.2s"
+                            }}
+                          >
+                            {isThisPlaying ? <Pause size={20} style={{ fill: "currentColor" }} /> : <Play size={20} style={{ fill: "currentColor", marginLeft: "2px" }} />}
+                          </button>
+                        );
+                      } else {
+                        let IconComponent = FileText;
+                        let iconColor = "#818CF8";
+                        if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) { IconComponent = Archive; iconColor = "#EF4444"; }
+                        else if (["pdf"].includes(ext)) { iconColor = "#EF4444"; }
+                        else if (["pptx", "ppt"].includes(ext)) { iconColor = "#F97316"; }
+                        else if (["docx", "doc"].includes(ext)) { iconColor = "#3B82F6"; }
+                        else if (["xlsx", "xls", "csv"].includes(ext)) { iconColor = "#10B981"; }
+                        thumbnailElement = (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "42px", height: "42px", borderRadius: "12px", backgroundColor: "rgba(255, 255, 255, 0.03)", color: iconColor, flexShrink: 0 }}>
+                            <IconComponent size={22} />
+                          </div>
+                        );
+                      }
+
+                      const canPreview = isImage || isVideo || isAudio || ["pdf", "txt"].includes(ext);
+
+                      return (
+                        <div
+                          key={file.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "14px 18px",
+                            background: "rgba(30, 41, 59, 0.4)",
+                            border: "1px solid rgba(255, 255, 255, 0.05)",
+                            borderRadius: "16px",
+                            gap: "12px"
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "14px", overflow: "hidden", flex: 1, minWidth: 0 }}>
+                            {thumbnailElement}
+                            <div style={{ overflow: "hidden", minWidth: 0 }}>
+                              <div style={{ fontSize: "14px", fontWeight: 600, color: "#F1F5F9", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }} title={file.file_name}>
+                                {file.file_name}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#94A3B8", marginTop: "2px" }}>
+                                {formatBytes(file.file_size)} • {new Date(file.created_at).toLocaleDateString()}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                            {canPreview && (
+                              <a
+                                href={fileDownloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="View / Preview"
+                                style={{
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  width: "38px", height: "38px", borderRadius: "12px",
+                                  backgroundColor: "rgba(16, 185, 129, 0.12)", color: "#10B981",
+                                  border: "1px solid rgba(16, 185, 129, 0.2)", cursor: "pointer", transition: "all 0.2s", textDecoration: "none"
+                                }}
+                              >
+                                <Eye size={18} />
+                              </a>
+                            )}
+                            <a
+                              href={fileDownloadUrl}
+                              download={file.file_name}
+                              title="Download"
+                              style={{
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                width: "38px", height: "38px", borderRadius: "12px",
+                                backgroundColor: "rgba(99, 102, 241, 0.15)", color: "#818CF8",
+                                border: "1px solid rgba(99, 102, 241, 0.2)", cursor: "pointer", transition: "all 0.2s", textDecoration: "none"
+                              }}
+                            >
+                              <Download size={18} />
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ textAlign: "center", marginBottom: "32px" }}>
+                <div style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "64px",
+                  height: "64px",
+                  borderRadius: "20px",
+                  background: "linear-gradient(135deg, #6366F1, #4F46E5)",
+                  boxShadow: "0 0 20px rgba(99, 102, 241, 0.4)",
+                  color: "#FFF",
+                  marginBottom: "16px"
+                }}>
+                  <Share2 size={32} />
+                </div>
+                <h2 style={{ margin: 0, fontSize: "28px", fontWeight: 800, letterSpacing: "-0.5px", background: "linear-gradient(to right, #FFF, #C7D2FE)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                  FileShare
+                </h2>
+                <p style={{ margin: "8px 0 0 0", fontSize: "14px", color: "#94A3B8" }}>
+                  {isRegistering ? "Create your offline local account" : "Log in to access your offline network"}
+                </p>
+              </div>
+
+              <form onSubmit={handleAuthSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                {isRegistering && (
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "#818CF8", marginBottom: "8px" }}>
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Enter display name"
+                      value={authName}
+                      onChange={(e) => setAuthName(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "12px 16px",
+                        borderRadius: "12px",
+                        background: "rgba(2, 6, 23, 0.5)",
+                        border: "1px solid rgba(255, 255, 255, 0.1)",
+                        color: "#FFF",
+                        fontSize: "15px",
+                        outline: "none",
+                        transition: "all 0.2s"
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = "#6366F1"}
+                      onBlur={(e) => e.target.style.borderColor = "rgba(255, 255, 255, 0.1)"}
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "#818CF8", marginBottom: "8px" }}>
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="Enter email address"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "12px 16px",
+                      borderRadius: "12px",
+                      background: "rgba(2, 6, 23, 0.5)",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      color: "#FFF",
+                      fontSize: "15px",
+                      outline: "none",
+                      transition: "all 0.2s"
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = "#6366F1"}
+                    onBlur={(e) => e.target.style.borderColor = "rgba(255, 255, 255, 0.1)"}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "#818CF8", marginBottom: "8px" }}>
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Enter password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "12px 16px",
+                      borderRadius: "12px",
+                      background: "rgba(2, 6, 23, 0.5)",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      color: "#FFF",
+                      fontSize: "15px",
+                      outline: "none",
+                      transition: "all 0.2s"
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = "#6366F1"}
+                    onBlur={(e) => e.target.style.borderColor = "rgba(255, 255, 255, 0.1)"}
+                  />
+                </div>
+
+                {authError && (
+                  <div style={{ color: "#F87171", fontSize: "14px", textAlign: "center", backgroundColor: "rgba(220, 38, 38, 0.1)", padding: "10px", borderRadius: "10px", border: "1px solid rgba(220, 38, 38, 0.2)" }}>
+                    {authError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  style={{
+                    width: "100%",
+                    padding: "14px",
+                    borderRadius: "12px",
+                    background: "linear-gradient(135deg, #6366F1, #4F46E5)",
+                    color: "#FFF",
+                    fontSize: "16px",
+                    fontWeight: 700,
+                    border: "none",
+                    cursor: "pointer",
+                    boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)",
+                    transition: "all 0.2s"
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-1px)"}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = "none"}
+                >
+                  {isRegistering ? "Register Account" : "Log In"}
+                </button>
+              </form>
+
+              <div style={{ display: "flex", alignItems: "center", margin: "20px 0", gap: "10px" }}>
+                <div style={{ flex: 1, height: "1px", backgroundColor: "rgba(255,255,255,0.08)" }}></div>
+                <span style={{ fontSize: "12px", color: "#64748B", textTransform: "uppercase", letterSpacing: "1px", fontWeight: 700 }}>OR</span>
+                <div style={{ flex: 1, height: "1px", backgroundColor: "rgba(255,255,255,0.08)" }}></div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsQuickDownloader(true)}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "12px",
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  color: "#E2E8F0",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  transition: "all 0.2s"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.06)";
+                  e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.3)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.03)";
+                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                }}
+              >
+                <Download size={16} />
+                <span>Quick Downloader (No Login)</span>
+              </button>
+            </>
+          )}
+
+          <div style={{ textAlign: "center", marginTop: "24px" }}>
+            <span style={{ fontSize: "14px", color: "#94A3B8" }}>
+              {isRegistering ? "Already have an account? " : "New to the offline network? "}
+            </span>
+            <button
+              onClick={() => {
+                setIsRegistering(!isRegistering);
+                setAuthError("");
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#6366F1",
+                fontSize: "14px",
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: 0,
+                textDecoration: "underline"
+              }}
+            >
+              {isRegistering ? "Log In" : "Register Now"}
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  };
+
+  const compressAndUploadAvatar = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Canvas context failed"));
+          return;
+        }
+
+        const size = 256;
+        canvas.width = size;
+        canvas.height = size;
+
+        const minSide = Math.min(img.width, img.height);
+        const sx = (img.width - minSide) / 2;
+        const sy = (img.height - minSide) / 2;
+        ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+
+        canvas.toBlob(async (blob) => {
+          if (!blob) {
+            reject(new Error("Compression failed"));
+            return;
+          }
+
+          const compressedFile = new File([blob], "avatar.jpg", { type: "image/jpeg" });
+          const formData = new FormData();
+          formData.append("device_id", deviceId);
+          formData.append("avatar_file", compressedFile);
+
+          try {
+            const res = await fetch(getApiUrl("/devices/upload_avatar"), {
+              method: "POST",
+              body: formData
+            });
+            const data = await res.json();
+            if (res.ok && data.avatar_url) {
+              resolve(data.avatar_url);
+            } else {
+              reject(new Error(data.error || "Upload failed"));
+            }
+          } catch (err) {
+            reject(err);
+          }
+        }, "image/jpeg", 0.7);
+      };
+      img.onerror = reject;
+    });
+  };
+
+  const handleProfileSetupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSetupSubmitting(true);
+
+    try {
+      let finalAvatarUrl = "avatar_1";
+
+      if (setupAvatarFile) {
+        finalAvatarUrl = await compressAndUploadAvatar(setupAvatarFile);
+      }
+
+      localStorage.setItem("deviceName", setupDeviceName);
+      localStorage.setItem("fileshare_user_avatar", finalAvatarUrl);
+      localStorage.setItem("fileshare_profile_completed", "true");
+      setDeviceName(setupDeviceName);
+      setUserCustomAvatar(finalAvatarUrl);
+
+      const ua = navigator.userAgent;
+      let detectedType = "desktop";
+      if (/android/i.test(ua) || /iPad|iPhone|iPod/.test(ua)) {
+        detectedType = "mobile";
+      }
+
+      await fetch(getApiUrl("/devices/register"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          device_id: deviceId,
+          username: username,
+          device_name: setupDeviceName,
+          device_type: detectedType,
+          avatar: finalAvatarUrl
+        })
+      });
+
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          type: "presence",
+          device_id: deviceId,
+          is_online: true
+        }));
+      }
+
+      setShowProfileSetupModal(false);
+      toast.success("Profile setup complete!");
+      handleRefreshDevices();
+      loadRecentChats();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update profile");
+    } finally {
+      setSetupSubmitting(false);
+    }
+  };
+
+  const renderProfileSetupModal = () => {
+    return (
+      <div className={styles.modalOverlay} style={{ zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className={styles.modalContent}
+          style={{ maxWidth: "420px", padding: "32px", background: "var(--bg-card)", border: "1px solid var(--border-color)", borderRadius: "20px" }}
+        >
+          <div style={{ textAlign: "center", marginBottom: "24px" }}>
+            <h3 style={{ fontSize: "20px", fontWeight: 800, color: "var(--text-primary)", margin: 0 }}>Complete Your Profile</h3>
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "6px" }}>Set up your local device identity</p>
+          </div>
+
+          <form onSubmit={handleProfileSetupSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            {/* Avatar Selector */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+              <div style={{
+                position: "relative",
+                width: "90px",
+                height: "90px",
+                borderRadius: "50%",
+                overflow: "hidden",
+                border: "2px dashed var(--primary)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                background: "rgba(99, 102, 241, 0.05)"
+              }} onClick={() => document.getElementById("profileSetupImageInput")?.click()}>
+                {setupAvatarPreview ? (
+                  <img src={setupAvatarPreview} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <UploadCloud size={28} style={{ color: "var(--primary)" }} />
+                )}
+              </div>
+              <input
+                id="profileSetupImageInput"
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setSetupAvatarFile(file);
+                    setSetupAvatarPreview(URL.createObjectURL(file));
+                  }
+                }}
+              />
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Click to upload profile photo</span>
+            </div>
+
+            {/* Device Name input */}
+            <div>
+              <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--text-secondary)", marginBottom: "8px" }}>
+                Device Display Name
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. My Laptop, iPhone"
+                value={setupDeviceName}
+                onChange={(e) => setSetupDeviceName(e.target.value)}
+                className={styles.settingsInput}
+                style={{ width: "100%" }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={setupSubmitting}
+              className={styles.modalBtnSave}
+              style={{
+                width: "100%",
+                padding: "12px",
+                fontSize: "14px",
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px"
+              }}
+            >
+              {setupSubmitting ? "Saving Profile..." : "Complete Setup"}
+            </button>
+          </form>
+        </motion.div>
+      </div>
+    );
+  };
+
   const totalUnreadChatsCount = useMemo(() => {
     return recentChats.reduce((acc, c) => acc + (c.unread || 0), 0);
   }, [recentChats]);
+
+  if (!isLoggedIn) {
+    return renderLoginScreen();
+  }
 
   return (
     <div className={styles.container}>
@@ -5328,16 +6423,27 @@ export default function Home() {
               </label>
             </div>
 
-            <div className={styles.modalFormGroup}>
-              <label className={styles.modalLabel}>Username</label>
-              <input
-                type="text"
-                className={styles.modalInput}
-                value={editUsernameInput}
-                onChange={(e) => setEditUsernameInput(e.target.value)}
-                placeholder="Enter username"
-              />
-            </div>
+             <div className={styles.modalFormGroup}>
+               <label className={styles.modalLabel}>Email (Cannot be changed)</label>
+               <input
+                 type="text"
+                 className={styles.modalInput}
+                 value={typeof window !== "undefined" ? (localStorage.getItem("fileshare_logged_in_email") || "") : ""}
+                 disabled
+                 style={{ opacity: 0.6, cursor: "not-allowed", backgroundColor: "rgba(255,255,255,0.05)" }}
+               />
+             </div>
+
+             <div className={styles.modalFormGroup}>
+               <label className={styles.modalLabel}>Username (Display Name)</label>
+               <input
+                 type="text"
+                 className={styles.modalInput}
+                 value={editUsernameInput}
+                 onChange={(e) => setEditUsernameInput(e.target.value)}
+                 placeholder="Enter username"
+               />
+             </div>
 
             <div className={styles.modalFormGroup}>
               <label className={styles.modalLabel}>Device Name</label>
@@ -5530,9 +6636,8 @@ export default function Home() {
               alt={lightboxData.fileName} 
               onError={(e) => {
                 const target = e.currentTarget;
-                const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
-                const alt1 = `http://${hostname}:8000/media/chat_attachments/${lightboxData.fileName}`;
-                const alt2 = `http://${hostname}:8000/media/${lightboxData.fileName}`;
+                const alt1 = `/media/chat_attachments/${lightboxData.fileName}`;
+                const alt2 = `/media/${lightboxData.fileName}`;
                 if (target.src !== alt1 && !target.src.includes("/chat_attachments/")) {
                   target.src = alt1;
                 } else if (target.src !== alt2) {
@@ -5960,44 +7065,51 @@ export default function Home() {
               playsInline
               muted={viewerAudioMuted}
             />
-            {liveFrameUrl && !isSharingScreen && !remoteScreenStreamRef.current ? (
-              <img 
-                src={liveFrameUrl} 
-                alt="Live Screen Broadcast"
-                style={{ 
-                  width: "100%",
-                  height: "100%",
-                  maxWidth: isStreamMinimized ? "100%" : (isStreamFullscreen ? "100%" : "1200px"), 
-                  maxHeight: isStreamMinimized ? "140px" : (isStreamFullscreen ? "100vh" : "80vh"), 
-                  objectFit: "contain", 
-                  borderRadius: isStreamMinimized ? "8px" : (isStreamFullscreen ? "0px" : "16px"),
-                  boxShadow: isStreamFullscreen ? "none" : "0 25px 60px rgba(0,0,0,0.8)",
-                  backgroundColor: "#000"
-                }}
-              />
+            {!isSharingScreen ? (
+              liveFrameUrl ? (
+                <img 
+                  src={liveFrameUrl} 
+                  alt="Live Screen Broadcast"
+                  style={{ 
+                    width: "100%",
+                    height: "100%",
+                    maxWidth: isStreamMinimized ? "100%" : (isStreamFullscreen ? "100%" : "1200px"), 
+                    maxHeight: isStreamMinimized ? "140px" : (isStreamFullscreen ? "100vh" : "80vh"), 
+                    objectFit: "contain", 
+                    borderRadius: isStreamMinimized ? "8px" : (isStreamFullscreen ? "0px" : "16px"),
+                    boxShadow: isStreamFullscreen ? "none" : "0 25px 60px rgba(0,0,0,0.8)",
+                    backgroundColor: "#000"
+                  }}
+                />
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px", color: "#FFF" }}>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.3)", borderTopColor: "#FFF", animation: "spin 1s linear infinite" }}></div>
+                  <span style={{ fontSize: "14px", fontWeight: 500 }}>Waiting for presenter stream...</span>
+                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+              )
             ) : (
               <video 
                 ref={(el) => {
                   remoteVideoElementRef.current = el;
                   if (el) {
+                    el.setAttribute("playsinline", "true");
+                    el.setAttribute("webkit-playsinline", "true");
                     let streamToUse = null;
                     if (isSharingScreen && localScreenStreamRef.current) {
                       streamToUse = localScreenStreamRef.current;
                     } else if (remoteScreenStreamRef.current) {
                       streamToUse = remoteScreenStreamRef.current;
-                    } else {
-                      if (!viewerFallbackStreamRef.current) {
-                        viewerFallbackStreamRef.current = createSimulatedScreenStream();
-                      }
-                      streamToUse = viewerFallbackStreamRef.current;
                     }
 
-                    if (el.srcObject !== streamToUse) {
-                      el.srcObject = streamToUse;
+                    if (streamToUse) {
+                      if (el.srcObject !== streamToUse) {
+                        el.srcObject = streamToUse;
+                      }
+                      el.muted = viewerAudioMuted;
+                      el.volume = viewerAudioMuted ? 0 : 1;
+                      el.play().catch(() => {});
                     }
-                    el.muted = viewerAudioMuted;
-                    el.volume = viewerAudioMuted ? 0 : 1;
-                    el.play().catch(() => {});
                   }
                 }} 
                 autoPlay 
@@ -6049,30 +7161,6 @@ export default function Home() {
                 <span style={{ fontSize: "12px", color: "#A0A5B5", fontWeight: 600 }}>
                   Status: Connected Live
                 </span>
-                {/* Viewer Audio Mute/Unmute Control */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextMuted = !viewerAudioMuted;
-                    setViewerAudioMuted(nextMuted);
-                    if (remoteVideoElementRef.current) {
-                      remoteVideoElementRef.current.muted = nextMuted;
-                      remoteVideoElementRef.current.volume = nextMuted ? 0 : 1;
-                      if (!nextMuted) remoteVideoElementRef.current.play().catch(() => {});
-                    }
-                    const audioEl = document.getElementById("viewer-audio-player") as HTMLAudioElement;
-                    if (audioEl) {
-                      audioEl.muted = nextMuted;
-                      audioEl.volume = nextMuted ? 0 : 1;
-                      if (!nextMuted) audioEl.play().catch(() => {});
-                    }
-                    toast.info(nextMuted ? "Stream Audio Muted" : "Stream Sound ON (High Volume)");
-                  }}
-                  style={{ display: "flex", alignItems: "center", gap: "6px", backgroundColor: viewerAudioMuted ? "rgba(239,68,68,0.2)" : "rgba(16,185,129,0.2)", color: viewerAudioMuted ? "#EF4444" : "#10B981", border: "1px solid currentColor", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}
-                >
-                  {viewerAudioMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-                  <span>{viewerAudioMuted ? "Unmute Sound" : "Sound ON"}</span>
-                </button>
               </div>
 
               <button
@@ -6132,6 +7220,8 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {showProfileSetupModal && renderProfileSetupModal()}
     </div>
   );
 };
