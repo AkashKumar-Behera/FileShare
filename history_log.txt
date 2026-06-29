@@ -37,3 +37,4 @@
 [2026-06-30 04:00:00] Merge user account relationships to consolidate My Files history
 [2026-06-30 04:05:00] Fix sender/receiver direction mapping based on username validation
 [2026-06-30 04:10:00] Create one-click Windows launcher batch script
+[2026-06-30 04:15:00] Document architecture and full offline installation guide in README
