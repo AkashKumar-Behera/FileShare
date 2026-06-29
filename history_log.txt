@@ -25,3 +25,4 @@
 [2026-06-30 03:00:00] Create custom HTTP live frame broadcast fallback
 [2026-06-30 03:05:00] Implement virtual canvas compression for high-fps frame updates
 [2026-06-30 03:10:00] Configure long-polling live frame updates at 50ms interval for viewers
+[2026-06-30 03:15:00] Bypass WebRTC audio prompt on viewer side for zero permissions join
