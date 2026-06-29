@@ -35,3 +35,4 @@
 [2026-06-30 03:50:00] Add interactive play/pause audio preview player in list
 [2026-06-30 03:55:00] Implement fallback check to serve files from chat attachments folder
 [2026-06-30 04:00:00] Merge user account relationships to consolidate My Files history
+[2026-06-30 04:05:00] Fix sender/receiver direction mapping based on username validation
