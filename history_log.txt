@@ -21,3 +21,4 @@
 [2026-06-30 02:40:00] Implement capture stream for screen sharing in presenter view
 [2026-06-30 02:45:00] Handle mixed content SSL errors on iOS Safari with local https options
 [2026-06-30 02:50:00] Proxy local Django API calls via frontend Next.js server
+[2026-06-30 02:55:00] Fix peer connection timeouts in strict local offline networks
