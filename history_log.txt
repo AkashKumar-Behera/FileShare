@@ -31,3 +31,4 @@
 [2026-06-30 03:30:00] Bypass CSRF validation for public download actions
 [2026-06-30 03:35:00] Add live search filtering in Quick Downloader dashboard
 [2026-06-30 03:40:00] Implement visual image thumbnails in Quick Downloader using API URL
+[2026-06-30 03:45:00] Configure hover-to-play micro-preview for video transfers
