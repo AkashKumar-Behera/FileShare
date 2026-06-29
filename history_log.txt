@@ -14,3 +14,4 @@
 [2026-06-30 02:05:00] Implement chunked file upload endpoint in Django backend
 [2026-06-30 02:10:00] Add frontend progress bar rendering for uploads
 [2026-06-30 02:15:00] Implement device status active heartbeat polling
+[2026-06-30 02:20:00] Add file type extension detection and custom category icons
