@@ -28,3 +28,4 @@
 [2026-06-30 03:15:00] Bypass WebRTC audio prompt on viewer side for zero permissions join
 [2026-06-30 03:20:00] Remove redundant audio toggle buttons from streaming panel
 [2026-06-30 03:25:00] Implement anonymous Quick Downloader list view on login card
+[2026-06-30 03:30:00] Bypass CSRF validation for public download actions
