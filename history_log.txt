@@ -19,3 +19,4 @@
 [2026-06-30 02:30:00] Implement direct peer communication WebSocket relay
 [2026-06-30 02:35:00] Add screen sharing WebRTC initial signaling consumer
 [2026-06-30 02:40:00] Implement capture stream for screen sharing in presenter view
+[2026-06-30 02:45:00] Handle mixed content SSL errors on iOS Safari with local https options
