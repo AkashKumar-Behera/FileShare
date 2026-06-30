@@ -53,6 +53,30 @@ def get_devices_for_user(user):
         Q(username=user.username)
     ).distinct()
 
+import os
+from django.conf import settings
+
+def cleanup_expired_messages():
+    try:
+        expiry_threshold = timezone.now() - timezone.timedelta(hours=1)
+        expired_messages = Message.objects.filter(
+            is_deleted=False,
+            created_at__lt=expiry_threshold
+        ).exclude(file='')
+
+        for msg in expired_messages:
+            if msg.file:
+                try:
+                    file_path = msg.file.path
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                except Exception:
+                    pass
+            msg.is_deleted = True
+            msg.save()
+    except Exception:
+        pass
+
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 
@@ -82,6 +106,7 @@ class ChatViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def messages(self, request, pk=None):
+        cleanup_expired_messages()
         chat = self.get_object()
         messages = chat.messages.filter(is_deleted=False).order_by('created_at')
         serializer = MessageSerializer(messages, many=True)

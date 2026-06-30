@@ -138,8 +138,70 @@ interface ChatMessage {
   reply_to_text?: string;
   reply_to_sender?: string;
   is_read?: boolean;
+  created_at?: string;
 }
 
+
+function AttachmentCountdown({ createdAt, onExpire }: { createdAt?: string; onExpire: () => void }) {
+  const [timeLeft, setTimeLeft] = useState<string>("");
+
+  React.useEffect(() => {
+    if (!createdAt) return;
+
+    const calculateTime = () => {
+      const createdTime = new Date(createdAt).getTime();
+      const expiryTime = createdTime + 60 * 60 * 1000;
+      const now = Date.now();
+      const diff = expiryTime - now;
+
+      if (diff <= 0) {
+        onExpire();
+        return "Expired";
+      }
+
+      const totalSeconds = Math.floor(diff / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+
+      return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} min`;
+    };
+
+    setTimeLeft(calculateTime());
+
+    const interval = setInterval(() => {
+      const display = calculateTime();
+      setTimeLeft(display);
+      if (display === "Expired") {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [createdAt, onExpire]);
+
+  if (!createdAt || timeLeft === "Expired") return null;
+
+  return (
+    <div 
+      style={{ 
+        display: "inline-flex", 
+        alignItems: "center", 
+        gap: "4px", 
+        fontSize: "11px", 
+        fontWeight: 600, 
+        color: "#EF4444", 
+        backgroundColor: "rgba(239, 68, 68, 0.1)",
+        padding: "2px 8px",
+        borderRadius: "12px",
+        marginTop: "6px",
+        width: "fit-content"
+      }}
+    >
+      <Clock size={12} />
+      <span>({timeLeft})</span>
+    </div>
+  );
+}
 
 function StarParticlesCanvas({ enabled, customWallpaperUrl }: { enabled: boolean; customWallpaperUrl?: string }) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -996,6 +1058,17 @@ export default function Home() {
     deletedMessageIdsRef.current = deletedMessageIds;
   }, [deletedMessageIds]);
 
+  const handleMessageExpire = (msgId: string) => {
+    setChatMessages(prev => {
+      const activeMsgs = prev[activeChat] || [];
+      if (!activeMsgs.some(m => m.id === msgId)) return prev;
+      return {
+        ...prev,
+        [activeChat]: activeMsgs.filter(m => m.id !== msgId)
+      };
+    });
+  };
+
   const handleDeleteMessage = (msgId: string, chatName: string) => {
     if (!msgId) return;
     setDeletedMessageIds(prev => {
@@ -1844,6 +1917,7 @@ export default function Home() {
                   file_name: m.file_name,
                   file_size: m.file_size,
                   file_type: m.file_type,
+                  created_at: m.created_at,
                   is_read: m.is_read
                 };
               });
@@ -1925,6 +1999,7 @@ export default function Home() {
                       file_name: m.file_name,
                       file_size: m.file_size,
                       file_type: m.file_type,
+                      created_at: m.created_at,
                       is_read: m.is_read
                     };
                   });
@@ -1961,7 +2036,8 @@ export default function Home() {
                             file: m.file,
                             file_name: m.file_name,
                             file_size: m.file_size,
-                            file_type: m.file_type
+                            file_type: m.file_type,
+                            created_at: m.created_at
                           };
                         });
                       setChatMessages(prev => ({
@@ -2018,7 +2094,8 @@ export default function Home() {
             file_type: msg.file_type,
             reply_to_text: msg.reply_to_text,
             reply_to_sender: msg.reply_to_sender,
-            is_read: msg.is_read
+            is_read: msg.is_read,
+            created_at: msg.created_at
           };
 
 
@@ -2158,7 +2235,8 @@ export default function Home() {
                 file_name: m.file_name,
                 file_size: m.file_size,
                 file_type: m.file_type,
-                is_read: m.is_read
+                is_read: m.is_read,
+                created_at: m.created_at
               };
             });
 
@@ -2242,6 +2320,7 @@ export default function Home() {
       sender: "you",
       text: inputVal,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      created_at: new Date().toISOString(),
       ...replyData
     };
 
@@ -2386,7 +2465,8 @@ export default function Home() {
         file: localBlobUrl,
         file_name: file.name,
         file_size: file.size,
-        file_type: file.type
+        file_type: file.type,
+        created_at: new Date().toISOString()
       };
 
       setChatMessages(prev => {
@@ -4187,26 +4267,12 @@ export default function Home() {
                       
                       if (isImg) {
                         return (
-                          <div style={{ marginTop: "8px", maxWidth: "320px", borderRadius: "8px", overflow: "hidden" }}>
-                            <img 
-                              src={fileUrl} 
-                              alt={msg.file_name} 
-                              style={{ width: "100%", height: "auto", maxHeight: "240px", objectFit: "cover", cursor: "pointer" }}
-                              onClick={() => {
-                                setLightboxData({
-                                  url: fileUrl,
-                                  fileName: msg.file_name || "attachment.png",
-                                  messageId: msg.id,
-                                  chatName: activeChat
-                                });
-                                setLightboxFilter("none");
-                                setLightboxRotation(0);
-                              }}
-                            />
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", backgroundColor: "rgba(0,0,0,0.05)" }}>
-                              <span style={{ fontSize: "11px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>{msg.file_name}</span>
-                              <button 
-                                type="button"
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <div style={{ marginTop: "8px", maxWidth: "320px", borderRadius: "8px", overflow: "hidden" }}>
+                              <img 
+                                src={fileUrl} 
+                                alt={msg.file_name} 
+                                style={{ width: "100%", height: "auto", maxHeight: "240px", objectFit: "cover", cursor: "pointer" }}
                                 onClick={() => {
                                   setLightboxData({
                                     url: fileUrl,
@@ -4216,30 +4282,49 @@ export default function Home() {
                                   });
                                   setLightboxFilter("none");
                                   setLightboxRotation(0);
-                                }} 
-                                className={styles.downloadBtn} 
-                                style={{ fontSize: "11px", padding: "2px 6px", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
-                              >
-                                <Eye size={12} /> View
-                              </button>
+                                }}
+                              />
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", backgroundColor: "rgba(0,0,0,0.05)" }}>
+                                <span style={{ fontSize: "11px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>{msg.file_name}</span>
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    setLightboxData({
+                                      url: fileUrl,
+                                      fileName: msg.file_name || "attachment.png",
+                                      messageId: msg.id,
+                                      chatName: activeChat
+                                    });
+                                    setLightboxFilter("none");
+                                    setLightboxRotation(0);
+                                  }} 
+                                  className={styles.downloadBtn} 
+                                  style={{ fontSize: "11px", padding: "2px 6px", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                                >
+                                  <Eye size={12} /> View
+                                </button>
+                              </div>
                             </div>
+                            <AttachmentCountdown createdAt={msg.created_at} onExpire={() => handleMessageExpire(msg.id)} />
                           </div>
                         );
-
                       } else if (isVideo) {
                         return (
-                          <div style={{ marginTop: "8px", maxWidth: "320px", borderRadius: "8px", overflow: "hidden" }}>
-                            <video 
-                              src={fileUrl} 
-                              controls 
-                              style={{ width: "100%", height: "auto", maxHeight: "240px" }}
-                            />
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", backgroundColor: "rgba(0,0,0,0.05)" }}>
-                              <span style={{ fontSize: "11px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>{msg.file_name}</span>
-                              <a href={fileUrl} download={msg.file_name} className={styles.downloadBtn} style={{ fontSize: "11px", padding: "2px 6px", textDecoration: "none" }}>
-                                <ArrowDown size={12} /> Download
-                              </a>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <div style={{ marginTop: "8px", maxWidth: "320px", borderRadius: "8px", overflow: "hidden" }}>
+                              <video 
+                                src={fileUrl} 
+                                controls 
+                                style={{ width: "100%", height: "auto", maxHeight: "240px" }}
+                              />
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", backgroundColor: "rgba(0,0,0,0.05)" }}>
+                                <span style={{ fontSize: "11px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>{msg.file_name}</span>
+                                <a href={fileUrl} download={msg.file_name} className={styles.downloadBtn} style={{ fontSize: "11px", padding: "2px 6px", textDecoration: "none" }}>
+                                  <ArrowDown size={12} /> Download
+                                </a>
+                              </div>
                             </div>
+                            <AttachmentCountdown createdAt={msg.created_at} onExpire={() => handleMessageExpire(msg.id)} />
                           </div>
                         );
                       } else if (isAudio) {
@@ -4253,23 +4338,26 @@ export default function Home() {
                         );
                       } else {
                         return (
-                          <div className={styles.fileAttachmentCard}>
-                            <div className={styles.fileIconContainer}>
-                              <FolderArchive size={20} />
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <div className={styles.fileAttachmentCard}>
+                              <div className={styles.fileIconContainer}>
+                                <FolderArchive size={20} />
+                              </div>
+                              <div className={styles.fileDetails}>
+                                <span className={styles.fileName}>{msg.file_name}</span>
+                                <span className={styles.fileSize}>{formatBytes(msg.file_size || 0)}</span>
+                              </div>
+                              <a 
+                                href={fileUrl} 
+                                download={msg.file_name} 
+                                className={styles.downloadBtn}
+                                style={{ display: "flex", alignItems: "center", textDecoration: "none" }}
+                              >
+                                <ArrowDown size={14} />
+                                <span style={{ marginLeft: "4px" }}>Download</span>
+                              </a>
                             </div>
-                            <div className={styles.fileDetails}>
-                              <span className={styles.fileName}>{msg.file_name}</span>
-                              <span className={styles.fileSize}>{formatBytes(msg.file_size || 0)}</span>
-                            </div>
-                            <a 
-                              href={fileUrl} 
-                              download={msg.file_name} 
-                              className={styles.downloadBtn}
-                              style={{ display: "flex", alignItems: "center", textDecoration: "none" }}
-                            >
-                              <ArrowDown size={14} />
-                              <span style={{ marginLeft: "4px" }}>Download</span>
-                            </a>
+                            <AttachmentCountdown createdAt={msg.created_at} onExpire={() => handleMessageExpire(msg.id)} />
                           </div>
                         );
                       }
