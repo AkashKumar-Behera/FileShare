@@ -2526,8 +2526,8 @@ export default function Home() {
     // Derived receivedFiles
     const rx = transfers
       .filter(t => t.direction === "receive" && t.status === "Completed")
-      .map((t, idx) => ({
-        id: `rc-${idx}`,
+      .map((t) => ({
+        id: t.id,
         fileName: t.fileName,
         device: t.device,
         ip: t.ip,
@@ -2540,8 +2540,8 @@ export default function Home() {
 
     // Derived myFiles (All files shared on this device)
     const my = transfers
-      .map((t, idx) => ({
-        id: `mf-${idx}`,
+      .map((t) => ({
+        id: t.id,
         name: t.fileName,
         type: t.type.toUpperCase() as any,
         size: t.size,
@@ -2608,12 +2608,34 @@ export default function Home() {
   };
 
   const handleDeleteMyFile = (id: string) => {
-    setMyFiles(prev => prev.filter(item => item.id !== id));
+    fetch(getApiUrl(`/transfers/${id}`), {
+      method: "DELETE"
+    })
+    .then(res => {
+      if (res.ok) {
+        toast.success("File deleted successfully");
+        loadRealTransfers(deviceId);
+      } else {
+        toast.error("Failed to delete file");
+      }
+    })
+    .catch(() => toast.error("Error connecting to server"));
   };
 
   // Received Files functions
   const handleDeleteReceivedFile = (id: string) => {
-    setReceivedFiles(prev => prev.filter(item => item.id !== id));
+    fetch(getApiUrl(`/transfers/${id}`), {
+      method: "DELETE"
+    })
+    .then(res => {
+      if (res.ok) {
+        toast.success("File deleted successfully");
+        loadRealTransfers(deviceId);
+      } else {
+        toast.error("Failed to delete file");
+      }
+    })
+    .catch(() => toast.error("Error connecting to server"));
   };
 
   const handleDownloadReceivedFile = (id: string) => {

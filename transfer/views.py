@@ -14,12 +14,44 @@ from django.views.decorators.csrf import csrf_exempt
 
 from django.db.models import Q
 
+from django.utils import timezone
+
+def cleanup_expired_transfers():
+    try:
+        expiry_threshold = timezone.now() - timezone.timedelta(hours=1)
+        expired = Transfer.objects.filter(created_at__lt=expiry_threshold)
+        for t in expired:
+            file_path = os.path.join(settings.MEDIA_ROOT, 'transfers', f"{t.id}_{t.file_name}")
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
+            t.delete()
+    except Exception:
+        pass
+
 @method_decorator(csrf_exempt, name='dispatch')
 class TransferViewSet(viewsets.ModelViewSet):
     queryset = Transfer.objects.all()
     serializer_class = TransferSerializer
 
+    def list(self, request, *args, **kwargs):
+        cleanup_expired_transfers()
+        return super().list(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        transfer = self.get_object()
+        file_path = os.path.join(settings.MEDIA_ROOT, 'transfers', f"{transfer.id}_{transfer.file_name}")
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+        return super().destroy(request, *args, **kwargs)
+
     def create(self, request, *args, **kwargs):
+        cleanup_expired_transfers()
         sender_device_id = request.data.get('sender_device_id')
         receiver_device_id = request.data.get('receiver_device_id')
         
@@ -38,6 +70,7 @@ class TransferViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def device_transfers(self, request):
+        cleanup_expired_transfers()
         device_id = request.query_params.get('device_id')
         if not device_id:
             return Response({"error": "device_id is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -146,6 +179,7 @@ class TransferViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], permission_classes=[AllowAny], authentication_classes=[])
     def public_files(self, request):
+        cleanup_expired_transfers()
         transfers = Transfer.objects.filter(status='completed').order_by('-created_at')
         serializer = self.get_serializer(transfers, many=True)
         return Response(serializer.data)
