@@ -5,6 +5,8 @@
   --bg-sidebar: #FFFFFF;
   --bg-card: #FFFFFF;
   --border-color: #ECEFF6;
+  --bg-input: #F3F4F6;
+  --bg-card-hover: #F9FAFB;
   
   --primary: #4338CA;
   --primary-hover: #3730A3;
@@ -24,9 +26,9 @@
   --info: #3B82F6;
   --info-light: #EFF6FF;
 
-  --text-primary: #1A1C23;
-  --text-secondary: #687182;
-  --text-muted: #9AA1B0;
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #64748B;
 
   
   --font-family-outfit: 'Outfit', 'Inter', -apple-system, sans-serif;

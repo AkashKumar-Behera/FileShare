@@ -459,6 +459,21 @@ export default function Home() {
     return lines.join("\r\n");
   };
 
+  // Optimize video sender parameters for local WebRTC streaming
+  const optimizeVideoSenderParameters = (sender: RTCRtpSender) => {
+    try {
+      const params = sender.getParameters();
+      if (!params.encodings) {
+        params.encodings = [{}];
+      }
+      params.encodings.forEach(encoding => {
+        encoding.maxBitrate = 35000000; // 35 Mbps for crisp LAN streaming (no blurriness)
+        encoding.maxFramerate = 120;     // Allow up to 120 FPS if monitor/host supports it
+      });
+      sender.setParameters(params).catch(() => {});
+    } catch {}
+  };
+
   // WebRTC Screen Sharing Handlers
   const createSimulatedScreenStream = (): MediaStream => {
     const canvas = document.createElement("canvas");
@@ -505,17 +520,7 @@ export default function Home() {
     return stream;
   };
 
-  const unlockRealIpPermissions = async () => {
-    try {
-      if (typeof navigator !== "undefined" && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-        s.getTracks().forEach(t => t.stop());
-      }
-    } catch {}
-  };
-
   const handleStartScreenShare = async () => {
-    await unlockRealIpPermissions();
     // 1. Mobile Check (Desktop Only Presenter)
     const isMobileDevice = typeof window !== "undefined" && (window.innerWidth < 768 || /Android|iPhone|iPad/i.test(navigator.userAgent));
     if (isMobileDevice) {
@@ -544,16 +549,12 @@ export default function Home() {
       if (getDisplayMediaFn) {
         stream = await getDisplayMediaFn({
           video: {
-            width: { ideal: 1920, max: 1920 },
-            height: { ideal: 1080, max: 1080 },
-            frameRate: { ideal: 60, max: 60 },
+            width: { ideal: 3840, max: 3840 }, // Support up to 4K screen capture
+            height: { ideal: 2160, max: 2160 },
+            frameRate: { ideal: 60, max: 120 }, // Support up to 120 FPS
             cursor: "always"
           } as any,
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false
-          } as any
+          audio: false
         });
       } else {
         toast.info("Using LAN Stream Presenter Mode for broadcast.");
@@ -577,7 +578,7 @@ export default function Home() {
           action: "start",
           device_id: deviceId,
           device_name: username || "PC User",
-          audio_enabled: true
+          audio_enabled: false
         })
       });
       const startData = await startRes.json();
@@ -644,15 +645,11 @@ export default function Home() {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 60 }
+          width: { ideal: 3840, max: 3840 },
+          height: { ideal: 2160, max: 2160 },
+          frameRate: { ideal: 60, max: 120 }
         },
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        }
+        audio: false
       });
 
       if (localScreenStreamRef.current) {
@@ -666,8 +663,14 @@ export default function Home() {
           const sender = senders.find(s => s.track && s.track.kind === track.kind);
           if (sender) {
             sender.replaceTrack(track);
+            if (track.kind === 'video') {
+              optimizeVideoSenderParameters(sender);
+            }
           } else {
-            pc.addTrack(track, stream);
+            const newSender = pc.addTrack(track, stream);
+            if (track.kind === 'video') {
+              optimizeVideoSenderParameters(newSender);
+            }
           }
         });
       });
@@ -764,7 +767,10 @@ export default function Home() {
                 peerConnectionsRef.current.set(senderId, pc);
 
                 localScreenStreamRef.current.getTracks().forEach(track => {
-                  pc.addTrack(track, localScreenStreamRef.current!);
+                  const sender = pc.addTrack(track, localScreenStreamRef.current!);
+                  if (track.kind === 'video') {
+                    optimizeVideoSenderParameters(sender);
+                  }
                 });
 
                 pc.onicecandidate = (e) => {
@@ -892,49 +898,71 @@ export default function Home() {
     offscreenCanvas.height = 720;
     const ctx = offscreenCanvas.getContext("2d");
     
-    let isUploading = false;
-    let isFetching = false;
+    let isActive = true;
 
-    const interval = setInterval(() => {
-      if (isSharingScreen && localScreenStreamRef.current) {
-        if (offscreenVideo.srcObject !== localScreenStreamRef.current) {
-          offscreenVideo.srcObject = localScreenStreamRef.current;
-          offscreenVideo.play().catch(() => {});
-        }
-        if (ctx && !isUploading && offscreenVideo.videoWidth > 0) {
-          isUploading = true;
+    const uploadNextFrame = () => {
+      if (!isActive || !isSharingScreen || !localScreenStreamRef.current) return;
+
+      if (offscreenVideo.srcObject !== localScreenStreamRef.current) {
+        offscreenVideo.srcObject = localScreenStreamRef.current;
+        offscreenVideo.play().catch(() => {});
+      }
+
+      if (ctx && offscreenVideo.videoWidth > 0) {
+        try {
+          ctx.drawImage(offscreenVideo, 0, 0, 1280, 720);
+          
+          let frameData;
+          // Try webp for much better compression and speed, fallback to jpeg
           try {
-            ctx.drawImage(offscreenVideo, 0, 0, 1280, 720);
-            const frameData = offscreenCanvas.toDataURL("image/jpeg", 0.6);
-            fetch(getApiUrl("/calls/live_frame"), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ device_id: deviceId, frame: frameData })
-            })
-            .catch(() => {})
-            .finally(() => { isUploading = false; });
+            frameData = offscreenCanvas.toDataURL("image/webp", 0.75);
           } catch {
-            isUploading = false;
+            frameData = offscreenCanvas.toDataURL("image/jpeg", 0.75);
           }
-        }
-      } else if (isWatchingScreen && !isSharingScreen) {
-        if (!isFetching) {
-          isFetching = true;
-          fetch(getApiUrl("/calls/live_frame"))
-            .then(res => res.json())
-            .then(data => {
-              if (data && data.frame) {
-                setLiveFrameUrl(data.frame);
-              }
-            })
-            .catch(() => {})
-            .finally(() => { isFetching = false; });
+
+          fetch(getApiUrl("/calls/live_frame"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ device_id: deviceId, frame: frameData })
+          })
+          .catch(() => {})
+          .finally(() => {
+            if (isActive) setTimeout(uploadNextFrame, 20); // Target ~50 FPS cap
+          });
+          return;
+        } catch {
+          // Keep looping on draw errors
         }
       }
-    }, 50);
+      if (isActive) setTimeout(uploadNextFrame, 100);
+    };
+
+    const fetchNextFrame = () => {
+      if (!isActive || !isWatchingScreen || isSharingScreen) return;
+
+      fetch(getApiUrl("/calls/live_frame"))
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.frame && isActive) {
+            setLiveFrameUrl(data.frame);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (isActive) setTimeout(fetchNextFrame, 16); // Target ~60 FPS cap
+          // Note: daisy chaining handles slower network speeds automatically by waiting for response first
+        });
+    };
+
+    // Kick off loops based on current mode
+    if (isSharingScreen) {
+      uploadNextFrame();
+    } else if (isWatchingScreen) {
+      fetchNextFrame();
+    }
 
     return () => {
-      clearInterval(interval);
+      isActive = false;
       offscreenVideo.pause();
       offscreenVideo.srcObject = null;
       if (document.body.contains(offscreenVideo)) {
@@ -950,6 +978,7 @@ export default function Home() {
   const [isScanning, setIsScanning] = useState(false);
   const [activeChat, setActiveChat] = useState<string>("");
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
+  const [showNewMessageBanner, setShowNewMessageBanner] = useState(false);
   const [messageInput, setMessageInput] = useState<string>("");
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>({});
   const [deletedMessageIds, setDeletedMessageIds] = useState<string[]>(() => {
@@ -1176,12 +1205,27 @@ export default function Home() {
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
     if (force || isNearBottom) {
       container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      setShowNewMessageBanner(false);
+    } else {
+      setShowNewMessageBanner(true);
     }
   };
 
+  const handleChatScroll = () => {
+    if (!chatBodyRef.current) return;
+    const container = chatBodyRef.current;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+    if (isNearBottom) {
+      setShowNewMessageBanner(false);
+    }
+  };
+
+  const shouldForceScrollRef = React.useRef(false);
+
   React.useEffect(() => {
-    scrollToBottom(true);
+    shouldForceScrollRef.current = true;
     activeChatRef.current = activeChat;
+    setShowNewMessageBanner(false);
   }, [activeChat]);
 
   React.useEffect(() => {
@@ -1189,7 +1233,17 @@ export default function Home() {
   }, [activeChatId]);
 
   React.useEffect(() => {
-    scrollToBottom(false);
+    const msgs = chatMessages[activeChat] || [];
+    const lastMsg = msgs[msgs.length - 1];
+    const isLastMsgFromMe = lastMsg && lastMsg.sender === "you";
+
+    if (shouldForceScrollRef.current || isLastMsgFromMe) {
+      scrollToBottom(true);
+      setTimeout(() => scrollToBottom(true), 50);
+      shouldForceScrollRef.current = false;
+    } else {
+      scrollToBottom(false);
+    }
   }, [chatMessages]);
 
   // Handle Hardware / Browser Back Button properly
@@ -1360,19 +1414,41 @@ export default function Home() {
     if (!targetId) return;
 
     setIsScanning(true);
-    fetch(getApiUrl(`/devices/online_devices?exclude_id=${targetId}`))
+    fetch(getApiUrl("/devices"))
       .then(res => {
         if (!res.ok) throw new Error("Error fetching devices");
         return res.json();
       })
       .then((data: any[]) => {
         const avatarsMap: Record<string, string> = {};
+        const currentUserEmail = (typeof window !== "undefined" ? localStorage.getItem("fileshare_logged_in_email") : "") || "";
         const filtered = data.filter(d => {
           const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
-          return displayName !== username && d.device_name !== deviceName && d.device_id !== targetId;
+          if (displayName === username || d.device_name === deviceName || d.device_id === targetId) {
+            return false;
+          }
+          if (!d.user_email || d.user_email.trim() === "") {
+            return false;
+          }
+          if (currentUserEmail && d.user_email.toLowerCase().trim() === currentUserEmail.toLowerCase().trim()) {
+            return false;
+          }
+          return true;
         });
-        const mapped = filtered.map(d => {
+
+        const groupedByUser: Record<string, {
+          name: string;
+          email: string;
+          device_id: string;
+          ip: string;
+          status: "online" | "offline";
+          avatar?: string;
+        }> = {};
+
+        filtered.forEach(d => {
           const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
+          const key = displayName.toLowerCase().trim();
+
           if (d.avatar && d.avatar !== "avatar_1") {
             avatarsMap[displayName] = d.avatar;
             if (d.device_name) avatarsMap[d.device_name] = d.avatar;
@@ -1380,13 +1456,31 @@ export default function Home() {
             if (d.device_id) avatarsMap[d.device_id] = d.avatar;
             if (d.ip_address) avatarsMap[d.ip_address] = d.avatar;
           }
-          return {
-            name: displayName,
-            ip: d.ip_address || "192.168.1.1",
-            status: d.is_online ? "online" : "offline",
-            avatar: d.avatar
-          };
+
+          const isOnline = !!d.is_online;
+
+          if (!groupedByUser[key]) {
+            groupedByUser[key] = {
+              name: displayName,
+              email: d.user_email || "",
+              device_id: d.device_id,
+              ip: d.ip_address || "192.168.1.1",
+              status: isOnline ? "online" : "offline",
+              avatar: d.avatar
+            };
+          } else {
+            if (isOnline) {
+              groupedByUser[key].status = "online";
+              groupedByUser[key].device_id = d.device_id;
+              groupedByUser[key].ip = d.ip_address || groupedByUser[key].ip;
+            }
+            if (d.avatar && d.avatar !== "avatar_1") {
+              groupedByUser[key].avatar = d.avatar;
+            }
+          }
         });
+
+        const mapped = Object.values(groupedByUser);
         
         setPeerAvatars(avatarsMap);
         setNearbyDevices(mapped);
@@ -1403,14 +1497,30 @@ export default function Home() {
       .then(res => res.json())
       .then((allDevs: any[]) => {
         if (Array.isArray(allDevs) && allDevs.length > 0) {
+          const currentUserEmail = (typeof window !== "undefined" ? localStorage.getItem("fileshare_logged_in_email") : "") || "";
+          const filteredDevs = allDevs.filter(d => {
+            const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
+            if (d.device_id === targetId || displayName === username || d.device_name === deviceName) {
+              return false;
+            }
+            if (!d.user_email || d.user_email.trim() === "") {
+              return false;
+            }
+            if (currentUserEmail && d.user_email.toLowerCase().trim() === currentUserEmail.toLowerCase().trim()) {
+              return false;
+            }
+            return true;
+          });
+
           const groups: Record<string, { name: string; ip: string; types: string[]; isOnline: boolean; lastSeenTime: string }> = {};
           
-          allDevs.forEach(d => {
+          filteredDevs.forEach(d => {
             const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
             const devType = (d.device_type && d.device_type.toLowerCase() === "mobile") ? "Android" : ((d.device_type && d.device_type.toLowerCase() === "tablet") ? "iOS" : "Windows");
+            const key = displayName.toLowerCase().trim();
             
-            if (!groups[displayName]) {
-              groups[displayName] = {
+            if (!groups[key]) {
+              groups[key] = {
                 name: displayName,
                 ip: d.ip_address || "192.168.1.1",
                 types: [devType],
@@ -1418,13 +1528,13 @@ export default function Home() {
                 lastSeenTime: d.is_online ? "Just now" : (d.last_seen ? new Date(d.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Recently")
               };
             } else {
-              if (!groups[displayName].types.includes(devType)) {
-                groups[displayName].types.push(devType);
+              if (!groups[key].types.includes(devType)) {
+                groups[key].types.push(devType);
               }
               if (d.is_online) {
-                groups[displayName].isOnline = true;
-                groups[displayName].lastSeenTime = "Just now";
-                groups[displayName].ip = d.ip_address || groups[displayName].ip;
+                groups[key].isOnline = true;
+                groups[key].lastSeenTime = "Just now";
+                groups[key].ip = d.ip_address || groups[key].ip;
               }
             }
           });
@@ -1493,7 +1603,7 @@ export default function Home() {
             name: name,
             time: time,
             lastMsg: snippet,
-            unread: chat.unread_count || 0
+            unread: name === activeChat ? 0 : (chat.unread_count || 0)
           };
         });
 
@@ -1706,6 +1816,14 @@ export default function Home() {
       .then(res => res.json())
       .then(chatObj => {
         setActiveChatId(chatObj.id);
+        
+        // Mark group chat as read
+        fetch(getApiUrl(`/chats/${chatObj.id}/mark_as_read`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: deviceId })
+        }).catch(() => {});
+
         fetch(getApiUrl(`/chats/${chatObj.id}/messages`))
           .then(res => res.json())
           .then((msgData: any[]) => {
@@ -1739,13 +1857,20 @@ export default function Home() {
       return;
     }
 
-    fetch(getApiUrl("/devices/online_devices"))
+    fetch(getApiUrl("/devices"))
       .then(res => res.json())
       .then((data: any[]) => {
         let targetDevice = data.find(d => {
           const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
-          return displayName === activeChat;
+          return displayName === activeChat && d.is_online;
         });
+
+        if (!targetDevice) {
+          targetDevice = data.find(d => {
+            const displayName = (d.username && d.username.trim() !== "" && d.username !== "You") ? d.username : d.device_name;
+            return displayName === activeChat;
+          });
+        }
 
         if (!targetDevice) {
           targetDevice = data.find(d => d.device_name === activeChat || d.username === activeChat);
@@ -3669,6 +3794,7 @@ export default function Home() {
                     groupSnippet = prefix + lastGroupMsg.text;
                   }
                 }
+                const recentGroupObj = recentChats.find(c => c.name === "Common Group" || c.name === "Group Chat");
 
                 return (
                   <button
@@ -3678,7 +3804,7 @@ export default function Home() {
                     style={{ width: "100%", padding: "10px 12px", marginBottom: "6px" }}
                   >
                     <div className={styles.chatDeviceLeft} style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
-                      <div style={{ position: "relative", flexShrink: 0 }}>
+                       <div style={{ position: "relative", flexShrink: 0 }}>
                         <div style={{ width: "42px", height: "42px", borderRadius: "50%", backgroundColor: "#8B5CF6", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "16px", boxShadow: "0 2px 8px rgba(139, 92, 246, 0.4)" }}>
                           <Users size={20} />
                         </div>
@@ -3686,7 +3812,14 @@ export default function Home() {
                       <div className={styles.chatDeviceDetails} style={{ flex: 1, overflow: "hidden", textAlign: "left" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
                           <span className={styles.chatDeviceName} style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)" }}>Common Group</span>
-                          {groupTime && <span style={{ fontSize: "11px", color: "var(--text-secondary)", opacity: 0.8 }}>{groupTime}</span>}
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                            {groupTime && <span style={{ fontSize: "11px", color: "var(--text-secondary)", opacity: 0.8 }}>{groupTime}</span>}
+                            {recentGroupObj && recentGroupObj.unread !== undefined && recentGroupObj.unread > 0 && (
+                              <span style={{ backgroundColor: "#EF4444", color: "#FFFFFF", fontSize: "10px", fontWeight: 700, minWidth: "18px", height: "18px", borderRadius: "9px", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
+                                {recentGroupObj.unread}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <span className={styles.chatDeviceIp} style={{ fontSize: "12.5px", color: "var(--primary-muted)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", marginTop: "2px" }}>
                           {groupSnippet}
@@ -3701,12 +3834,11 @@ export default function Home() {
                 const initial = device.name ? device.name.charAt(0).toUpperCase() : "?";
                 const colors = ["#6C63FF", "#3B82F6", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6"];
                 const bgColor = colors[(device.name ? device.name.charCodeAt(0) : 0) % colors.length];
-                
                 const msgs = chatMessages[device.name] || [];
                 const lastMsgObj = msgs.length > 0 ? msgs[msgs.length - 1] : null;
                 const isContactTyping = typingUsers.includes(device.name);
-
-                let snippetContent = device.ip || "192.168.1.1";
+                const recentChatObj = recentChats.find(c => c.name === device.name);
+                let snippetContent = "";
                 let timeStr = "";
 
                 if (isContactTyping) {
@@ -3732,6 +3864,11 @@ export default function Home() {
                   } else if (lastMsgObj.text) {
                     snippetContent = prefix + lastMsgObj.text;
                   }
+                } else if (recentChatObj && recentChatObj.lastMsg && recentChatObj.lastMsg.trim() !== "") {
+                  snippetContent = recentChatObj.lastMsg;
+                  timeStr = recentChatObj.time || "";
+                } else {
+                  snippetContent = device.status === "online" ? "Online" : "Offline";
                 }
 
                 return (
@@ -3768,7 +3905,14 @@ export default function Home() {
                       <div className={styles.chatDeviceDetails} style={{ flex: 1, overflow: "hidden", textAlign: "left" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
                           <span className={styles.chatDeviceName} style={{ fontWeight: 600, fontSize: "14px", color: "var(--text-primary)" }}>{device.name}</span>
-                          {timeStr && <span style={{ fontSize: "11px", color: "var(--text-secondary)", opacity: 0.8 }}>{timeStr}</span>}
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                            {timeStr && <span style={{ fontSize: "11px", color: "var(--text-secondary)", opacity: 0.8 }}>{timeStr}</span>}
+                            {recentChatObj && recentChatObj.unread !== undefined && recentChatObj.unread > 0 && (
+                              <span style={{ backgroundColor: "#EF4444", color: "#FFFFFF", fontSize: "10px", fontWeight: 700, minWidth: "18px", height: "18px", borderRadius: "9px", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
+                                {recentChatObj.unread}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <span className={styles.chatDeviceIp} style={{ fontSize: "12.5px", color: isContactTyping ? "#10B981" : "var(--text-secondary)", fontWeight: isContactTyping ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", marginTop: "2px" }}>
                           {snippetContent}
@@ -3942,7 +4086,7 @@ export default function Home() {
               customWallpaperUrl={chatWallpapers[activeChat] || chatWallpapers["global"]} 
             />
             
-            <div ref={chatBodyRef} className={styles.chatPanelBody} style={{ flex: 1, overflowY: "auto", position: "relative", zIndex: 1 }}>
+            <div ref={chatBodyRef} onScroll={handleChatScroll} className={styles.chatPanelBody} style={{ flex: 1, overflowY: "auto", position: "relative", zIndex: 1 }}>
               <span className={styles.chatDaySeparator}>Today</span>
 
               {(() => {
@@ -4177,6 +4321,36 @@ export default function Home() {
               {/* Scroll Anchor */}
               <div ref={messagesEndRef} />
             </div>
+
+            {showNewMessageBanner && (
+              <button 
+                onClick={() => scrollToBottom(true)}
+                style={{
+                  position: "absolute",
+                  bottom: "16px",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  backgroundColor: "var(--primary)",
+                  color: "#FFFFFF",
+                  padding: "8px 16px",
+                  borderRadius: "20px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 4px 12px rgba(99, 102, 241, 0.45)",
+                  cursor: "pointer",
+                  zIndex: 10,
+                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                  fontFamily: "inherit"
+                }}
+                className="animate-fade-in"
+              >
+                <span>New Messages</span>
+                <ArrowDown size={14} />
+              </button>
+            )}
           </div>
 
 
@@ -5127,7 +5301,11 @@ export default function Home() {
             {/* User Profile Card */}
             <div className={styles.settingsProfileCard} style={{ flexDirection: "column", alignItems: "center", textAlign: "center", padding: "20px" }}>
               <div className={styles.settingsAvatarWrapper} style={{ margin: "0 auto" }}>
-                {username ? username.charAt(0).toUpperCase() : "Y"}
+                {userCustomAvatar ? (
+                  <img src={userCustomAvatar} alt={username} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  username ? username.charAt(0).toUpperCase() : "Y"
+                )}
               </div>
               <div className={styles.settingsProfileInfo} style={{ alignItems: "center", marginTop: "12px" }}>
                 <span className={styles.settingsProfileName}>{username}</span>
@@ -5268,56 +5446,6 @@ export default function Home() {
                       Log Out
                     </button>
                   </div>
-                </div>
-
-                {/* Chat Atmosphere & Particles Settings */}
-                <span className={styles.settingsGroupTitle} style={{ marginTop: "24px" }}>Chat Atmosphere & Effects</span>
-                <div className={styles.settingsCard}>
-                  <div className={styles.settingsRow}>
-                    <div className={styles.settingsRowLeft}>
-                      <span className={styles.settingsRowTitle}>Chat Star Particles (Dark Mode)</span>
-                      <span className={styles.settingsRowDesc}>Render dynamic twinkling stars in dark mode chat background</span>
-                    </div>
-                    <label className={styles.switchContainer}>
-                      <input 
-                        type="checkbox" 
-                        className={styles.switchInput}
-                        checked={settingsStarEnabled}
-                        onChange={(e) => setSettingsStarEnabled(e.target.checked)}
-                      />
-                      <span className={styles.switchSlider} />
-                    </label>
-                  </div>
-
-                  {settingsStarEnabled && (
-                    <>
-                      <div className={styles.settingsFormGroup} style={{ marginTop: "12px" }}>
-                        <label className={styles.settingsLabel}>Star Intensity / Density</label>
-                        <select 
-                          className={styles.settingsSelect}
-                          value={settingsStarIntensity}
-                          onChange={(e) => setSettingsStarIntensity(e.target.value)}
-                        >
-                          <option value="Low">Low (Subtle stars)</option>
-                          <option value="Medium">Medium (Balanced galaxy)</option>
-                          <option value="High">High (Dense starlight)</option>
-                        </select>
-                      </div>
-
-                      <div className={styles.settingsFormGroup} style={{ marginTop: "12px" }}>
-                        <label className={styles.settingsLabel}>Twinkle & Motion Speed</label>
-                        <select 
-                          className={styles.settingsSelect}
-                          value={settingsStarSpeed}
-                          onChange={(e) => setSettingsStarSpeed(e.target.value)}
-                        >
-                          <option value="Slow">Slow (Calm drift)</option>
-                          <option value="Normal">Normal (Smooth twinkle)</option>
-                          <option value="Fast">Fast (Energetic motion)</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
                 </div>
               </div>
             )}
@@ -6341,6 +6469,18 @@ export default function Home() {
               localStorage.setItem("theme", "light");
             }
           }}
+          activeScreenPresenter={activeScreenPresenter}
+          isSharingScreen={isSharingScreen}
+          onStartScreenShare={() => {
+            setActivePage("Screen Share");
+            if (!isSharingScreen) {
+              handleStartScreenShare();
+            }
+          }}
+          onWatchScreen={() => {
+            setActivePage("Screen Share");
+            setIsWatchingScreen(true);
+          }}
         />
         <div className={styles.contentWrapper}>
           {/* Mobile Category Quick-Access Pills (Only on Dashboard for quick jump) */}
@@ -6362,8 +6502,22 @@ export default function Home() {
                     onClick={() => setActivePage(cat.id)}
                     className={`${styles.categoryBtn} ${isActive ? styles.activeCategory : ""}`}
                   >
-                    <div className={styles.categoryIconWrapper}>
+                    <div className={styles.categoryIconWrapper} style={{ position: "relative" }}>
                       <Icon size={20} />
+                      {cat.id === "Chats" && totalUnreadChatsCount > 0 && (
+                        <span 
+                          style={{
+                            position: "absolute",
+                            top: "-2px",
+                            right: "-2px",
+                            width: "8px",
+                            height: "8px",
+                            borderRadius: "50%",
+                            backgroundColor: "#EF4444",
+                            boxShadow: "0 0 6px #EF4444"
+                          }}
+                        />
+                      )}
                     </div>
                     <span className={styles.categoryLabel}>{cat.label}</span>
                   </button>
@@ -6379,6 +6533,7 @@ export default function Home() {
         <BottomNav 
           activePage={activePage} 
           onPageChange={setActivePage} 
+          unreadChatCount={totalUnreadChatsCount}
           onPlusClick={() => {
             handleRefreshDevices();
             setIsScanning(true);

@@ -2129,7 +2129,7 @@
   flex-shrink: 0;
 }
 
-.fileDetails {
+.fileAttachmentCard .fileDetails {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -2137,7 +2137,7 @@
   overflow: hidden;
 }
 
-.fileName {
+.fileAttachmentCard .fileName {
   font-size: 13px;
   font-weight: 600;
   color: #FFFFFF;
@@ -2148,7 +2148,7 @@
   width: 100%;
 }
 
-.fileSize {
+.fileAttachmentCard .fileSize {
   font-size: 11px;
   color: #C7D2FE;
   margin-top: 2px;
